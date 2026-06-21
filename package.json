@@ -1,0 +1,92 @@
+{
+  "name": "caudalflow",
+  "version": "2.0.0",
+  "description": "Visual canvas for AI conversations — branch, explore in parallel, merge insights",
+  "type": "module",
+  "bin": {
+    "caudalflow": "./bin/cli.js"
+  },
+  "files": [
+    "dist",
+    "bin"
+  ],
+  "scripts": {
+    "dev": "vite",
+    "dev:ui": "vite",
+    "dev:bff": "tsx watch --env-file=apps/agent/.env apps/bff/src/server.ts",
+    "dev:agent": "cd apps/agent && .venv/bin/langgraph dev --port 8133",
+    "dev:agent:win": "cd apps/agent && .venv\\Scripts\\langgraph.exe dev --port 8133",
+    "dev:agent:global": "cd apps/agent && langgraph dev --port 8133",
+    "dev:copilot": "concurrently -k -n ui,bff,agent -c blue,cyan,green \"npm run dev:ui\" \"npm run dev:bff\" \"npm run dev:agent\"",
+    "install:agent": "cd apps/agent && python3 -m venv .venv && .venv/bin/pip install -U pip && .venv/bin/pip install -e .",
+    "install:agent:win": "cd apps/agent && python -m venv .venv && .venv\\Scripts\\pip.exe install -U pip && .venv\\Scripts\\pip.exe install -e .",
+    "build": "tsc -b && vite build",
+    "lint": "eslint .",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "ai",
+    "chat",
+    "canvas",
+    "llm",
+    "branching",
+    "conversations",
+    "anthropic",
+    "openai"
+  ],
+  "engines": {
+    "node": ">=20.12.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/caudal-labs/caudalflow.git"
+  },
+  "homepage": "https://github.com/caudal-labs/caudalflow",
+  "license": "MIT",
+  "dependencies": {
+    "@ai-sdk/anthropic": "^3.0.81",
+    "@ai-sdk/google": "^3.0.80",
+    "@ai-sdk/openai": "^3.0.67",
+    "@hono/node-server": "^1.13.6",
+    "@tailwindcss/vite": "^4.2.2",
+    "@xyflow/react": "^12.10.1",
+    "ai": "^6.0.193",
+    "hono": "^4.7.11",
+    "i18next": "^26.3.1",
+    "i18next-browser-languagedetector": "^8.2.1",
+    "lucide-react": "^0.577.0",
+    "nanoid": "^5.1.7",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "react-i18next": "^17.0.8",
+    "react-markdown": "^10.1.0",
+    "react-syntax-highlighter": "^16.1.1",
+    "recharts": "^3.8.1",
+    "remark-gfm": "^4.0.1",
+    "tailwindcss": "^4.2.2",
+    "zod": "^3.25.76",
+    "zustand": "^5.0.12"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.4",
+    "@types/node": "^24.12.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@types/react-syntax-highlighter": "^15.5.13",
+    "@vitejs/plugin-react": "^6.0.0",
+    "concurrently": "^9.2.1",
+    "eslint": "^9.39.4",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "eslint-plugin-react-refresh": "^0.5.2",
+    "globals": "^17.4.0",
+    "jsdom": "^29.0.2",
+    "tsx": "^4.19.2",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.56.1",
+    "vite": "^8.0.0",
+    "vitest": "^4.1.2"
+  }
+}
