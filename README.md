@@ -278,7 +278,7 @@ npm run lint
 npm test
 ```
 
-Configure real model credentials in `apps/agent/.env`. Never commit API keys or place secrets in documentation, examples, browser storage, or test fixtures.
+Copy `apps/agent/.env.example` to `apps/agent/.env` and configure real model credentials there. For OpenAI-compatible providers, set `OPENAI_BASE_URL`, `OPENAI_API_KEY`, and `OPENAI_MODEL`; the local BFF keeps these values out of the browser. Never commit API keys or place secrets in documentation, browser storage, or test fixtures.
 
 ## Contributing
 

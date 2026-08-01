@@ -7,6 +7,7 @@ type Theme = 'light' | 'dark' | 'system';
 
 interface SettingsState {
   llmConfig: LLMConfig;
+  assistantProviderId: string;
   showMinimap: boolean;
   showSystemPrompts: boolean;
   showSettings: boolean;
@@ -15,6 +16,7 @@ interface SettingsState {
   theme: Theme;
   selectMode: boolean;
   updateLLMConfig: (config: Partial<LLMConfig>) => void;
+  setAssistantProviderId: (providerId: string) => void;
   toggleMinimap: () => void;
   toggleSystemPrompts: () => void;
   toggleSettings: () => void;
@@ -38,19 +40,31 @@ function applyTheme(theme: Theme) {
   document.documentElement.setAttribute('data-theme', resolvedTheme);
 }
 
+export function migrateSettings(persistedState: unknown) {
+  if (!persistedState || typeof persistedState !== 'object') return persistedState;
+
+  const state = persistedState as Record<string, unknown>;
+  const llmConfig = state.llmConfig;
+  if (!llmConfig || typeof llmConfig !== 'object') return state;
+
+  const safeConfig = { ...(llmConfig as Record<string, unknown>) };
+  delete safeConfig.apiKey;
+  delete safeConfig.endpoint;
+  delete safeConfig.providerName;
+  return { ...state, llmConfig: safeConfig };
+}
+
 export const useSettingsStore = create<SettingsState>()(
   persist(
     (set, get) => ({
       llmConfig: {
         providerId: 'mock',
-        providerName: 'Mock',
-        endpoint: 'https://api.openai.com/v1/chat/completions',
-        apiKey: '',
         model: 'gpt-4o-mini',
         temperature: 0.7,
         maxTokens: 2048,
         mockDelay: 30,
       },
+      assistantProviderId: 'same',
       showMinimap: true,
       showSystemPrompts: false,
       showSettings: false,
@@ -65,20 +79,21 @@ export const useSettingsStore = create<SettingsState>()(
 
         // When switching providers, set sensible defaults for endpoint and model
         if (config.providerId && config.providerId !== current.providerId) {
-          const defaults: Record<string, { model: string; endpoint?: string }> = {
-            openai: { model: 'gpt-4o-mini', endpoint: 'https://api.openai.com/v1/chat/completions' },
-            anthropic: { model: 'claude-sonnet-4-5-20250929', endpoint: 'https://api.anthropic.com/v1/messages' },
-            custom: { model: '', endpoint: '' },
+          const defaults: Record<string, { model: string }> = {
+            openai: { model: 'gpt-4o-mini' },
+            anthropic: { model: 'claude-sonnet-4-5-20250929' },
+            custom: { model: '' },
           };
           const d = defaults[config.providerId];
           if (d) {
             merged.model = d.model;
-            if (d.endpoint) merged.endpoint = d.endpoint;
           }
         }
 
         set({ llmConfig: merged });
       },
+
+      setAssistantProviderId: (providerId) => set({ assistantProviderId: providerId }),
 
       toggleMinimap: () => set({ showMinimap: !get().showMinimap }),
 
@@ -106,8 +121,11 @@ export const useSettingsStore = create<SettingsState>()(
     }),
     {
       name: 'caudalflow-settings',
+      version: 2,
+      migrate: (persistedState) => migrateSettings(persistedState) as SettingsState,
       partialize: (state) => ({
         llmConfig: state.llmConfig,
+        assistantProviderId: state.assistantProviderId,
         showMinimap: state.showMinimap,
         showSystemPrompts: state.showSystemPrompts,
         welcomeDismissed: state.welcomeDismissed,

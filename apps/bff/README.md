@@ -1,6 +1,18 @@
-# CaudalFlow CopilotKit BFF
+# MeshCLI BFF
 
-This app hosts the CopilotKit Runtime endpoint used by the Vite frontend.
+This app keeps model credentials out of the browser and proxies streaming LLM
+requests from the Vite frontend. OpenAI-compatible providers are configured
+with the same server-side variables:
+
+```bash
+OPENAI_BASE_URL=https://api.deepseek.com/v1
+OPENAI_API_KEY=replace-with-your-key
+OPENAI_MODEL=deepseek-chat
+```
+
+Copy `apps/agent/.env.example` to `apps/agent/.env`, update the values, and never
+commit that file. The BFF exposes only the configured provider name, model, and
+endpoint host; it never returns the API key to the browser.
 
 Run it from the repository root:
 
@@ -8,6 +20,10 @@ Run it from the repository root:
 npm run dev:bff
 ```
 
-The frontend proxies `/api/copilotkit` to this service during local development.
-The BFF talks to the LangGraph agent at `LANGGRAPH_DEPLOYMENT_URL`, defaulting to
-`http://localhost:8133`.
+The frontend proxies `/api/llm` to this service during local development.
+
+- `POST /api/llm` streams a model response.
+- `POST /api/agent` streams canvas-aware assistant events with the selected provider.
+- `GET /api/llm/config` returns non-secret configuration status.
+- `POST /api/llm/test` verifies the configured provider.
+- `GET /api/llm/models` proxies an OpenAI-compatible model list.

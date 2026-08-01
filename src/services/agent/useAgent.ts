@@ -3,10 +3,16 @@ import { agentClient } from './client';
 import type { AgentEvent, CanvasState } from './types';
 import { useFlowStore } from '../../stores/flowStore';
 import { useChatStore } from '../../stores/chatStore';
+import { useSettingsStore } from '../../stores/settingsStore';
 
 export function useAgent() {
   const [isRunning, setIsRunning] = useState(false);
   const [messages, setMessages] = useState<{ role: string; content: string }[]>([]);
+  const nodeProviderId = useSettingsStore((state) => state.llmConfig.providerId);
+  const assistantProviderId = useSettingsStore((state) => state.assistantProviderId);
+  const resolvedProviderId = assistantProviderId === 'same'
+    ? nodeProviderId
+    : assistantProviderId;
 
   const buildCanvasState = useCallback((): CanvasState => {
     const flow = useFlowStore.getState();
@@ -30,7 +36,7 @@ export function useAgent() {
 
     let assistantMessage = '';
 
-    await agentClient.sendMessage(message, canvasState, threadId, (event: AgentEvent) => {
+    await agentClient.sendMessage(message, canvasState, threadId, resolvedProviderId, (event: AgentEvent) => {
       switch (event.type) {
         case 'text_delta':
           assistantMessage += (event.data as { delta: string }).delta;
@@ -50,13 +56,16 @@ export function useAgent() {
           console.log('Tool call:', event.data);
           break;
         case 'error':
-          console.error('Agent error:', (event.data as { error: string }).error);
+          setMessages((prev) => [
+            ...prev,
+            { role: 'assistant', content: `Error: ${(event.data as { error: string }).error}` },
+          ]);
           break;
       }
     });
 
     setIsRunning(false);
-  }, [buildCanvasState]);
+  }, [buildCanvasState, resolvedProviderId]);
 
   const abort = useCallback(() => {
     agentClient.abort();

@@ -1,9 +1,9 @@
 import { useTranslation } from 'react-i18next';
-import { X, Sun, Moon, Monitor, Eye, EyeOff, RefreshCw, CheckCircle, XCircle, Loader2 } from 'lucide-react';
-import { useState, useCallback } from 'react';
+import { X, Sun, Moon, Monitor, RefreshCw, CheckCircle, XCircle, Loader2 } from 'lucide-react';
+import { useState, useCallback, useEffect } from 'react';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { listProviders } from '../../services/providers/registry';
-import { fetchModels, testConnection } from '../../services/providers/api';
+import { fetchModels, fetchServerConfig, testConnection, type ServerLLMConfig } from '../../services/providers/api';
 
 export function SettingsPanel() {
   const { t } = useTranslation();
@@ -11,6 +11,8 @@ export function SettingsPanel() {
   const setShowSettings = useSettingsStore((s) => s.setShowSettings);
   const config = useSettingsStore((s) => s.llmConfig);
   const updateConfig = useSettingsStore((s) => s.updateLLMConfig);
+  const assistantProviderId = useSettingsStore((s) => s.assistantProviderId);
+  const setAssistantProviderId = useSettingsStore((s) => s.setAssistantProviderId);
   const showSystemPrompts = useSettingsStore((s) => s.showSystemPrompts);
   const toggleSystemPrompts = useSettingsStore((s) => s.toggleSystemPrompts);
   const language = useSettingsStore((s) => s.language);
@@ -18,34 +20,103 @@ export function SettingsPanel() {
   const theme = useSettingsStore((s) => s.theme);
   const setTheme = useSettingsStore((s) => s.setTheme);
   const providers = listProviders();
-  const [showApiKey, setShowApiKey] = useState(false);
   const [loadingModels, setLoadingModels] = useState(false);
   const [testingConnection, setTestingConnection] = useState(false);
   const [connectionResult, setConnectionResult] = useState<{ success: boolean; message: string } | null>(null);
   const [models, setModels] = useState<{ id: string; name: string }[]>([]);
+  const [serverConfig, setServerConfig] = useState<ServerLLMConfig | null>(null);
+  const [serverConfigError, setServerConfigError] = useState('');
+  const [assistantServerConfig, setAssistantServerConfig] = useState<ServerLLMConfig | null>(null);
+  const [assistantConfigError, setAssistantConfigError] = useState('');
+  const resolvedAssistantProviderId = assistantProviderId === 'same'
+    ? config.providerId
+    : assistantProviderId;
+
+  useEffect(() => {
+    if (!showSettings || config.providerId === 'mock') {
+      setServerConfig(null);
+      setServerConfigError('');
+      return;
+    }
+
+    let cancelled = false;
+    setServerConfig(null);
+    setServerConfigError('');
+    setModels([]);
+    setConnectionResult(null);
+
+    fetchServerConfig(config.providerId)
+      .then((nextConfig) => {
+        if (cancelled) return;
+        setServerConfig(nextConfig);
+        if (nextConfig.model && nextConfig.model !== config.model) {
+          updateConfig({ model: nextConfig.model });
+        }
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          setServerConfigError(error instanceof Error ? error.message : t('settings.bffUnavailable'));
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [showSettings, config.providerId, config.model, updateConfig, t]);
+
+  useEffect(() => {
+    if (!showSettings || resolvedAssistantProviderId === 'mock') {
+      setAssistantServerConfig(null);
+      setAssistantConfigError(
+        resolvedAssistantProviderId === 'mock' ? t('settings.assistantMockUnavailable') : '',
+      );
+      return;
+    }
+
+    let cancelled = false;
+    setAssistantServerConfig(null);
+    setAssistantConfigError('');
+    fetchServerConfig(resolvedAssistantProviderId)
+      .then((nextConfig) => {
+        if (!cancelled) setAssistantServerConfig(nextConfig);
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          setAssistantConfigError(error instanceof Error ? error.message : t('settings.bffUnavailable'));
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [showSettings, resolvedAssistantProviderId, t]);
 
   const handleFetchModels = useCallback(async () => {
-    if (!config.endpoint || !config.apiKey) return;
     setLoadingModels(true);
+    setConnectionResult(null);
     try {
-      const fetchedModels = await fetchModels(config.endpoint, config.apiKey);
+      const fetchedModels = await fetchModels(config.providerId);
       setModels(fetchedModels);
+    } catch (error) {
+      setConnectionResult({
+        success: false,
+        message: error instanceof Error ? error.message : t('settings.fetchModelsFailed'),
+      });
     } finally {
       setLoadingModels(false);
     }
-  }, [config.endpoint, config.apiKey]);
+  }, [config.providerId, t]);
 
   const handleTestConnection = useCallback(async () => {
-    if (!config.endpoint || !config.apiKey) return;
     setTestingConnection(true);
     setConnectionResult(null);
     try {
-      const result = await testConnection(config.endpoint, config.apiKey, config.model);
+      const result = await testConnection(config.providerId);
       setConnectionResult(result);
     } finally {
       setTestingConnection(false);
     }
-  }, [config.endpoint, config.apiKey, config.model]);
+  }, [config.providerId]);
 
   if (!showSettings) return null;
 
@@ -60,7 +131,7 @@ export function SettingsPanel() {
   ];
 
   return (
-    <div className="absolute top-0 right-0 z-50 h-full w-80 bg-surface-900 border-l border-border shadow-2xl shadow-black/50 flex flex-col">
+    <div className="absolute top-0 right-0 z-50 h-full w-[380px] max-w-[calc(100vw-1rem)] bg-surface-900 border-l border-border shadow-2xl shadow-black/50 flex flex-col">
       <div className="flex items-center justify-between px-4 py-3 border-b border-border">
         <h2 className="text-sm font-semibold text-text-primary">{t('settings.title')}</h2>
         <button
@@ -71,7 +142,7 @@ export function SettingsPanel() {
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="flex-1 overflow-y-auto p-4 space-y-5">
         {/* Theme Section */}
         <div className="border-b border-border pb-4">
           <h3 className="text-xs font-semibold text-text-secondary mb-3">{t('settings.theme')}</h3>
@@ -93,168 +164,186 @@ export function SettingsPanel() {
           </div>
         </div>
 
-        {/* LLM Provider Section */}
-        <div>
-          <label className={labelClass}>{t('settings.llmProvider')}</label>
-          <select
-            value={config.providerId}
-            onChange={(e) => updateConfig({ providerId: e.target.value })}
-            className={inputClass}
-          >
-            {providers.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* Provider Name - Editable for custom */}
-        {config.providerId === 'custom' && (
-          <div>
-            <label className={labelClass}>{t('settings.providerName')}</label>
-            <input
-              type="text"
-              value={config.providerName}
-              onChange={(e) => updateConfig({ providerName: e.target.value })}
-              className={inputClass}
-              placeholder="My Custom Provider"
-            />
+        {/* Model routing */}
+        <section>
+          <div className="mb-2">
+            <h3 className="text-xs font-semibold text-text-secondary">{t('settings.modelRouting')}</h3>
+            <p className="text-[10px] text-text-muted mt-1">{t('settings.modelRoutingDescription')}</p>
           </div>
-        )}
-
-        {/* API Key Input - Show for all providers except mock */}
-        {config.providerId !== 'mock' && (
-          <div>
-            <label className={labelClass}>{t('settings.apiKey')}</label>
-            <div className="relative">
-              <input
-                type={showApiKey ? 'text' : 'password'}
-                value={config.apiKey}
-                onChange={(e) => updateConfig({ apiKey: e.target.value })}
+          <div className="rounded-xl border border-border bg-surface-800/60 p-3 space-y-3">
+            <div>
+              <label className={labelClass}>{t('settings.nodeChatProvider')}</label>
+              <select
+                value={config.providerId}
+                onChange={(e) => updateConfig({ providerId: e.target.value })}
                 className={inputClass}
-                placeholder={t('settings.apiKeyPlaceholder')}
-              />
-              <button
-                type="button"
-                onClick={() => setShowApiKey(!showApiKey)}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary"
               >
-                {showApiKey ? <EyeOff size={14} /> : <Eye size={14} />}
-              </button>
-            </div>
-            <p className="text-[10px] text-text-muted mt-1">
-              {t('settings.apiKeyDescription')}
-            </p>
-          </div>
-        )}
-
-        {/* Endpoint URL - Show for custom provider */}
-        {config.providerId === 'custom' && (
-          <div>
-            <label className={labelClass}>{t('settings.endpoint')}</label>
-            <input
-              type="text"
-              value={config.endpoint}
-              onChange={(e) => updateConfig({ endpoint: e.target.value })}
-              className={inputClass}
-              placeholder="https://api.example.com/v1/chat/completions"
-            />
-            <p className="text-[10px] text-text-muted mt-1">
-              {t('settings.endpointDescription')}
-            </p>
-
-            {/* Test Connection & Fetch Models */}
-            <div className="flex gap-2 mt-2">
-              <button
-                onClick={handleTestConnection}
-                disabled={!config.endpoint || !config.apiKey || testingConnection}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-surface-700 hover:bg-surface-600 rounded-md transition-colors disabled:opacity-50"
-              >
-                {testingConnection ? (
-                  <Loader2 size={12} className="animate-spin" />
-                ) : connectionResult?.success ? (
-                  <CheckCircle size={12} className="text-green-400" />
-                ) : connectionResult?.success === false ? (
-                  <XCircle size={12} className="text-red-400" />
-                ) : null}
-                {t('settings.testConnection')}
-              </button>
-              <button
-                onClick={handleFetchModels}
-                disabled={!config.endpoint || !config.apiKey || loadingModels}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-surface-700 hover:bg-surface-600 rounded-md transition-colors disabled:opacity-50"
-              >
-                {loadingModels ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
-                {t('settings.fetchModels')}
-              </button>
-            </div>
-
-            {connectionResult && (
-              <p className={`text-[10px] mt-1 ${connectionResult.success ? 'text-green-400' : 'text-red-400'}`}>
-                {connectionResult.message}
-              </p>
-            )}
-          </div>
-        )}
-
-        {/* Model Config - Show for non-mock providers */}
-        {config.providerId !== 'mock' && (
-          <>
-            <div>
-              <label className={labelClass}>{t('settings.model')}</label>
-              {models.length > 0 ? (
-                <select
-                  value={config.model}
-                  onChange={(e) => updateConfig({ model: e.target.value })}
-                  className={inputClass}
-                >
-                  <option value="">{t('settings.selectModel')}</option>
-                  {models.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.name}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <input
-                  type="text"
-                  value={config.model}
-                  onChange={(e) => updateConfig({ model: e.target.value })}
-                  className={inputClass}
-                  placeholder={config.providerId === 'openai' ? 'gpt-4o-mini' : config.providerId === 'anthropic' ? 'claude-sonnet-4-20250514' : 'model-id'}
-                />
-              )}
-            </div>
-            <div>
-              <label className={labelClass}>{t('settings.temperature')}</label>
-              <input
-                type="range"
-                min="0"
-                max="2"
-                step="0.1"
-                value={config.temperature}
-                onChange={(e) =>
-                  updateConfig({ temperature: parseFloat(e.target.value) })
-                }
-                className="w-full accent-accent-500"
-              />
-              <div className="text-xs text-text-muted text-right">
-                {config.temperature}
+                {providers.map((provider) => (
+                  <option key={provider.id} value={provider.id}>
+                    {provider.name}
+                  </option>
+                ))}
+              </select>
+              <div className="mt-1.5 flex items-center justify-between gap-2 text-[10px]">
+                <span className="text-text-muted truncate">
+                  {config.providerId === 'mock'
+                    ? t('settings.localMockMode')
+                    : serverConfig
+                      ? `${serverConfig.endpointHost} · ${serverConfig.model || t('settings.noModelConfigured')}`
+                      : serverConfigError || t('settings.loadingServerConfig')}
+                </span>
+                {config.providerId !== 'mock' && serverConfig && (
+                  <span className={serverConfig.configured ? 'text-green-400' : 'text-amber-400'}>
+                    {serverConfig.configured ? t('settings.ready') : t('settings.notConfigured')}
+                  </span>
+                )}
               </div>
             </div>
+
+            <div className="h-px bg-border" />
+
             <div>
-              <label className={labelClass}>{t('settings.maxTokens')}</label>
-              <input
-                type="number"
-                value={config.maxTokens}
-                onChange={(e) =>
-                  updateConfig({ maxTokens: parseInt(e.target.value) || 2048 })
-                }
+              <div className="flex items-center justify-between gap-2 mb-1">
+                <label className="text-xs font-medium">{t('settings.assistantProvider')}</label>
+                {assistantProviderId === 'same' && (
+                  <span className="rounded-full bg-accent-500/10 px-2 py-0.5 text-[10px] text-accent-400">
+                    {t('settings.followsNodeChat')}
+                  </span>
+                )}
+              </div>
+              <select
+                value={assistantProviderId}
+                onChange={(e) => setAssistantProviderId(e.target.value)}
                 className={inputClass}
-              />
+              >
+                <option value="same">{t('settings.sameAsNodeChat')}</option>
+                {providers.filter((provider) => provider.id !== 'mock').map((provider) => (
+                  <option key={provider.id} value={provider.id}>
+                    {provider.name}
+                  </option>
+                ))}
+              </select>
+              <div className="mt-1.5 flex items-center justify-between gap-2 text-[10px]">
+                <span className={assistantConfigError ? 'text-amber-400 truncate' : 'text-text-muted truncate'}>
+                  {assistantServerConfig
+                    ? `${assistantServerConfig.endpointHost} · ${assistantServerConfig.model || t('settings.noModelConfigured')}`
+                    : assistantConfigError || t('settings.loadingServerConfig')}
+                </span>
+                {assistantServerConfig && (
+                  <span className={assistantServerConfig.configured ? 'text-green-400' : 'text-amber-400'}>
+                    {assistantServerConfig.configured ? t('settings.ready') : t('settings.notConfigured')}
+                  </span>
+                )}
+              </div>
             </div>
-          </>
+          </div>
+        </section>
+
+        {/* Server connection */}
+        {config.providerId !== 'mock' && (
+          <section>
+            <div className="flex items-center justify-between gap-3 mb-2">
+              <h3 className="text-xs font-semibold text-text-secondary">{t('settings.serverConnection')}</h3>
+              <span className={`flex items-center gap-1 text-xs ${serverConfig?.configured ? 'text-green-400' : 'text-amber-400'}`}>
+                {serverConfig?.configured ? <CheckCircle size={12} /> : <XCircle size={12} />}
+                {serverConfig?.configured ? t('settings.configured') : t('settings.notConfigured')}
+              </span>
+            </div>
+            <div className="rounded-xl border border-border bg-surface-800/60 p-3 space-y-3">
+              {serverConfig && (
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="rounded-lg bg-surface-900/70 px-3 py-2">
+                    <div className="text-[10px] text-text-muted">{t('settings.endpoint')}</div>
+                    <div className="mt-0.5 truncate text-xs text-text-primary">{serverConfig.endpointHost}</div>
+                  </div>
+                  <div className="rounded-lg bg-surface-900/70 px-3 py-2">
+                    <div className="text-[10px] text-text-muted">{t('settings.model')}</div>
+                    <div className="mt-0.5 truncate text-xs text-text-primary">{serverConfig.model || t('settings.noModelConfigured')}</div>
+                  </div>
+                  <div className="col-span-2 flex items-center justify-between rounded-lg bg-surface-900/70 px-3 py-2 text-xs">
+                    <span className="text-text-muted">{t('settings.apiKey')}</span>
+                    <span className={serverConfig.configured ? 'text-green-400' : 'text-amber-400'}>
+                      {serverConfig.configured ? t('settings.configuredOnServer') : t('settings.missingOnServer')}
+                    </span>
+                  </div>
+                </div>
+              )}
+              {serverConfigError && <p className="text-[10px] text-red-400">{serverConfigError}</p>}
+
+              <div className="flex gap-2">
+                <button
+                  onClick={handleTestConnection}
+                  disabled={!serverConfig?.configured || testingConnection}
+                  className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-surface-700 px-3 py-2 text-xs transition-colors hover:bg-surface-600 disabled:opacity-50"
+                >
+                  {testingConnection ? (
+                    <Loader2 size={12} className="animate-spin" />
+                  ) : connectionResult?.success ? (
+                    <CheckCircle size={12} className="text-green-400" />
+                  ) : connectionResult?.success === false ? (
+                    <XCircle size={12} className="text-red-400" />
+                  ) : null}
+                  {t('settings.testConnection')}
+                </button>
+                {config.providerId !== 'anthropic' && (
+                  <button
+                    onClick={handleFetchModels}
+                    disabled={!serverConfig?.configured || loadingModels}
+                    className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-surface-700 px-3 py-2 text-xs transition-colors hover:bg-surface-600 disabled:opacity-50"
+                  >
+                    {loadingModels ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+                    {t('settings.fetchModels')}
+                  </button>
+                )}
+              </div>
+
+              {connectionResult && (
+                <p className={`text-[10px] ${connectionResult.success ? 'text-green-400' : 'text-red-400'}`}>
+                  {connectionResult.message}
+                </p>
+              )}
+              {models.length > 0 && (
+                <p className="text-[10px] text-text-muted break-words">
+                  {t('settings.availableModels', { count: models.length })}: {models.slice(0, 5).map((model) => model.id).join(', ')}
+                  {models.length > 5 ? '…' : ''}
+                </p>
+              )}
+              <p className="text-[10px] text-text-muted">{t('settings.serverConfigDescription')}</p>
+            </div>
+          </section>
+        )}
+
+        {/* Generation settings */}
+        {config.providerId !== 'mock' && (
+          <section>
+            <h3 className="text-xs font-semibold text-text-secondary mb-2">{t('settings.generation')}</h3>
+            <div className="rounded-xl border border-border bg-surface-800/60 p-3 space-y-3">
+              <div>
+                <div className="mb-1 flex items-center justify-between text-xs">
+                  <label className="font-medium">{t('settings.temperature')}</label>
+                  <span className="text-text-muted">{config.temperature}</span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="2"
+                  step="0.1"
+                  value={config.temperature}
+                  onChange={(e) => updateConfig({ temperature: parseFloat(e.target.value) })}
+                  className="w-full accent-accent-500"
+                />
+              </div>
+              <div>
+                <label className={labelClass}>{t('settings.maxTokens')}</label>
+                <input
+                  type="number"
+                  value={config.maxTokens}
+                  onChange={(e) => updateConfig({ maxTokens: parseInt(e.target.value) || 2048 })}
+                  className={inputClass}
+                />
+              </div>
+            </div>
+          </section>
         )}
 
         {/* Mock Provider Config */}

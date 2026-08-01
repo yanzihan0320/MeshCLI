@@ -78,7 +78,6 @@ type NodeContext = import('../../stores/chatStore').ActiveNodeContext;
 interface LLMConfig {
   providerId: string;
   model: string;
-  endpoint: string;
   temperature: number;
 }
 
@@ -226,7 +225,6 @@ export function buildCanvasAgentState(nodeContext?: NodeContext | null): CanvasA
     llmConfig: {
       providerId: llmConfig.providerId,
       model: llmConfig.model,
-      endpoint: llmConfig.endpoint,
       temperature: llmConfig.temperature ?? 0.7,
     },
   };

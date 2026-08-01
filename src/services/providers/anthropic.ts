@@ -56,7 +56,6 @@ export const AnthropicProvider: LLMProvider = {
         headers: {
           'Content-Type': 'application/json',
           'x-llm-provider': 'anthropic',
-          'x-api-key': config.apiKey || '',
         },
         body: JSON.stringify(body),
         signal,

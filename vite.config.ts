@@ -14,6 +14,10 @@ export default defineConfig({
         target: process.env.BFF_URL ?? 'http://localhost:4000',
         changeOrigin: true,
       },
+      '/api/agent': {
+        target: process.env.BFF_URL ?? 'http://localhost:4000',
+        changeOrigin: true,
+      },
     },
   },
   test: {

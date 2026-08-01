@@ -9,6 +9,7 @@ export class AgentClient {
     message: string,
     canvasState: CanvasState,
     threadId: string,
+    providerId: string,
     onEvent: (event: AgentEvent) => void
   ): Promise<void> {
     this.abortController = new AbortController();
@@ -18,6 +19,7 @@ export class AgentClient {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'x-llm-provider': providerId,
         },
         body: JSON.stringify({
           message,
@@ -28,7 +30,9 @@ export class AgentClient {
       });
 
       if (!response.ok) {
-        throw new Error(`Agent error: ${response.statusText}`);
+        const data = await response.json().catch(() => ({}));
+        const message = (data as { error?: string }).error || response.statusText;
+        throw new Error(`Agent error: ${message}`);
       }
 
       const reader = response.body?.getReader();

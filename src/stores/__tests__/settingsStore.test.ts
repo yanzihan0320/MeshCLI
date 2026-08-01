@@ -1,11 +1,8 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { useSettingsStore } from '../settingsStore';
+import { migrateSettings, useSettingsStore } from '../settingsStore';
 
 const INITIAL_CONFIG = {
   providerId: 'mock',
-    providerName: 'Mock',
-  endpoint: 'https://api.openai.com/v1',
-  apiKey: '',
   model: 'gpt-4o-mini',
   temperature: 0.7,
   maxTokens: 2048,
@@ -15,6 +12,7 @@ const INITIAL_CONFIG = {
 beforeEach(() => {
   useSettingsStore.setState({
     llmConfig: { ...INITIAL_CONFIG },
+    assistantProviderId: 'same',
     showMinimap: true,
     showSystemPrompts: false,
     showSettings: false,
@@ -22,6 +20,28 @@ beforeEach(() => {
 });
 
 describe('settingsStore', () => {
+  it('lets the assistant follow or override the node-chat provider', () => {
+    expect(useSettingsStore.getState().assistantProviderId).toBe('same');
+    useSettingsStore.getState().setAssistantProviderId('custom');
+    expect(useSettingsStore.getState().assistantProviderId).toBe('custom');
+  });
+
+  it('removes legacy browser secrets during persistence migration', () => {
+    const migrated = migrateSettings({
+      llmConfig: {
+        ...INITIAL_CONFIG,
+        apiKey: 'legacy-secret',
+        endpoint: 'https://example.test/v1',
+        providerName: 'Legacy provider',
+      },
+    }) as { llmConfig: Record<string, unknown> };
+
+    expect(migrated.llmConfig.apiKey).toBeUndefined();
+    expect(migrated.llmConfig.endpoint).toBeUndefined();
+    expect(migrated.llmConfig.providerName).toBeUndefined();
+    expect(migrated.llmConfig.model).toBe('gpt-4o-mini');
+  });
+
   describe('updateLLMConfig', () => {
     it('merges partial config updates', () => {
       useSettingsStore.getState().updateLLMConfig({ temperature: 0.9 });

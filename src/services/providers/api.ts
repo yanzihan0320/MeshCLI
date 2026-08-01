@@ -3,114 +3,58 @@ export interface ModelInfo {
   name: string;
 }
 
-export async function fetchModels(endpoint: string, apiKey: string): Promise<ModelInfo[]> {
-  try {
-    // Build models endpoint from chat completions endpoint
-    let modelsUrl: string;
-    if (endpoint.includes('/chat/completions')) {
-      modelsUrl = endpoint.replace(/\/chat\/completions$/, '/models');
-    } else if (endpoint.endsWith('/v1') || endpoint.endsWith('/v1/')) {
-      modelsUrl = endpoint.replace(/\/?$/, '/models');
-    } else {
-      // Assume user provided base URL, try /v1/models
-      modelsUrl = endpoint.replace(/\/?$/, '') + '/v1/models';
-    }
-    
-    const response = await fetch(modelsUrl, {
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to fetch models: ${response.status}`);
-    }
-
-    const data = await response.json();
-    
-    // Handle different response formats
-    if (Array.isArray(data)) {
-      return data.map((m: { id?: string; name?: string }) => ({
-        id: m.id || m.name || '',
-        name: m.name || m.id || '',
-      }));
-    }
-    if (data.data && Array.isArray(data.data)) {
-      return data.data.map((m: { id?: string; name?: string }) => ({
-        id: m.id || m.name || '',
-        name: m.name || m.id || '',
-      }));
-    }
-    
-    return [];
-  } catch (error) {
-    console.error('Failed to fetch models:', error);
-    return [];
-  }
+export interface ServerLLMConfig {
+  provider: string;
+  displayName: string;
+  model: string;
+  configured: boolean;
+  endpointHost: string;
 }
 
-export async function testConnection(endpoint: string, apiKey: string, model?: string): Promise<{ success: boolean; message: string }> {
+async function readError(response: Response, fallback: string) {
+  const data = await response.json().catch(() => ({}));
+  return (data as { error?: string }).error || fallback;
+}
+
+export async function fetchServerConfig(provider: string): Promise<ServerLLMConfig> {
+  const response = await fetch(`/api/llm/config?provider=${encodeURIComponent(provider)}`);
+  if (!response.ok) {
+    throw new Error(await readError(response, `Unable to load server configuration (${response.status})`));
+  }
+  return response.json();
+}
+
+export async function fetchModels(provider: string): Promise<ModelInfo[]> {
+  const response = await fetch(`/api/llm/models?provider=${encodeURIComponent(provider)}`);
+  if (!response.ok) {
+    throw new Error(await readError(response, `Unable to fetch models (${response.status})`));
+  }
+
+  const data = await response.json();
+  const models = Array.isArray(data) ? data : data.data;
+  if (!Array.isArray(models)) return [];
+
+  return models.map((model: { id?: string; name?: string }) => ({
+    id: model.id || model.name || '',
+    name: model.name || model.id || '',
+  })).filter((model: ModelInfo) => model.id);
+}
+
+export async function testConnection(provider: string): Promise<{ success: boolean; message: string }> {
   try {
-    // Build chat completions endpoint
-    let chatUrl: string;
-    if (endpoint.includes('/chat/completions')) {
-      chatUrl = endpoint;
-    } else if (endpoint.endsWith('/v1') || endpoint.endsWith('/v1/')) {
-      chatUrl = endpoint.replace(/\/?$/, '') + '/chat/completions';
-    } else {
-      chatUrl = endpoint.replace(/\/?$/, '') + '/v1/chat/completions';
-    }
-
-    // Use provided model or fetch first available model
-    let testModel = model;
-    if (!testModel) {
-      const models = await fetchModels(endpoint, apiKey);
-      if (models.length > 0) {
-        testModel = models[0].id;
-      } else {
-        return { success: false, message: 'No models available. Please enter a model ID.' };
-      }
-    }
-
-    const response = await fetch(chatUrl, {
+    const response = await fetch(`/api/llm/test?provider=${encodeURIComponent(provider)}`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: testModel,
-        messages: [{ role: 'user', content: 'Hi' }],
-      }),
+      headers: { 'Content-Type': 'application/json' },
     });
-
-    // If we get a response (even 4xx), the endpoint is reachable
-    if (response.status === 401 || response.status === 403) {
-      return { success: false, message: 'Invalid API key' };
-    }
-    if (response.status === 404) {
-      return { success: false, message: 'Endpoint not found' };
-    }
-    if (response.status === 429) {
-      return { success: true, message: 'Endpoint reachable (rate limited)' };
-    }
-    if (response.ok) {
-      return { success: true, message: 'Connection successful' };
-    }
-    
-    // Other errors - endpoint is reachable but something is wrong
-    const errorData = await response.json().catch(() => ({}));
-    return { 
-      success: false, 
-      message: errorData.error?.message || `Error: ${response.status}` 
+    const data = await response.json().catch(() => ({}));
+    return {
+      success: Boolean((data as { success?: boolean }).success),
+      message: (data as { message?: string }).message || `Connection failed (${response.status})`,
     };
-  } catch (error: unknown) {
-    if (error instanceof Error) {
-      if (error.name === 'TypeError' && error.message.includes('fetch')) {
-        return { success: false, message: 'Cannot reach endpoint (CORS or network error)' };
-      }
-      return { success: false, message: error.message || 'Connection failed' };
-    }
-    return { success: false, message: 'Connection failed' };
+  } catch (error) {
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : 'BFF is unavailable',
+    };
   }
 }

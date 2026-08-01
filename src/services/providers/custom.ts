@@ -32,16 +32,6 @@ export const CustomProvider: LLMProvider = {
     callbacks: StreamCallbacks,
     signal: AbortSignal
   ) {
-    // Build chat completions endpoint from base URL
-    let chatUrl: string;
-    if (config.endpoint.includes('/chat/completions')) {
-      chatUrl = config.endpoint;
-    } else if (config.endpoint.endsWith('/v1') || config.endpoint.endsWith('/v1/')) {
-      chatUrl = config.endpoint.replace(/\/?$/, '') + '/chat/completions';
-    } else {
-      chatUrl = config.endpoint.replace(/\/?$/, '') + '/v1/chat/completions';
-    }
-
     const body = {
       model: config.model,
       messages: toOpenAIMessages(messages),
@@ -51,11 +41,11 @@ export const CustomProvider: LLMProvider = {
     };
 
     try {
-      const response = await fetch(chatUrl, {
+      const response = await fetch('/api/llm', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${config.apiKey}`,
+          'x-llm-provider': 'custom',
         },
         body: JSON.stringify(body),
         signal,
