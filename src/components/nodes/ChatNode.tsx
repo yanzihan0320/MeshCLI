@@ -14,6 +14,8 @@ import { ChatNodeHeader } from './ChatNodeHeader';
 import { ChatMessageList } from './ChatMessageList';
 import { ChatInput } from './ChatInput';
 import { ChatNodeDeleteConfirmation } from './ChatNodeDeleteConfirmation';
+import { AgentRunPanel } from './AgentRunPanel';
+import { useNodeAgentRun } from '../../hooks/useNodeAgentRun';
 
 const PALETTE_COLORS = [
   '#22c55e',
@@ -30,6 +32,7 @@ export function ChatNodeComponent({ id, data, selected }: NodeProps<ChatNode>) {
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
   const [isPanning, setIsPanning] = useState(false);
   const { sendMessage, cancelStream } = useNodeCopilotChat(id, topic, parentNodeId, branchText, parentNodeIds as string[] | undefined, mergeAction as string | undefined);
+  const agentRun = useNodeAgentRun(id, topic);
   const { getViewport, setViewport } = useReactFlow();
 
   // Listen for space key and delete key
@@ -603,8 +606,21 @@ export function ChatNodeComponent({ id, data, selected }: NodeProps<ChatNode>) {
         </div>
       )}
 
+      <AgentRunPanel
+        run={agentRun.latestRun}
+        isRunning={agentRun.isRunning}
+        clientError={agentRun.clientError}
+        onCancel={agentRun.cancelRun}
+      />
       <ChatMessageList nodeId={id} onExplore={handleExplore} />
-      <ChatInput nodeId={id} onSend={sendMessage} onCancel={cancelStream} />
+      <ChatInput
+        nodeId={id}
+        onSend={sendMessage}
+        onCancel={cancelStream}
+        onRunAgent={agentRun.startRun}
+        onCancelAgent={agentRun.cancelRun}
+        isAgentRunning={agentRun.isRunning}
+      />
     </div>
   );
 }

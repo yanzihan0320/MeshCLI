@@ -8,6 +8,11 @@ import {
 } from '@xyflow/react';
 import { nanoid } from 'nanoid';
 import type { ChatNode, ChatNodeData, TopicEdge } from '../types/flow';
+import type { AgentEvent, AgentRunRecord } from '../../packages/protocol/src/agent';
+import { isTerminalAgentEvent, statusAfterEvent } from '../../packages/protocol/src/agent';
+
+const MAX_RUNS_PER_NODE = 10;
+const MAX_EVENTS_PER_RUN = 1_000;
 
 interface FlowState {
   nodes: ChatNode[];
@@ -23,6 +28,8 @@ interface FlowState {
   setEdges: (edges: TopicEdge[]) => void;
   getChildCount: (parentId: string) => number;
   toggleCollapseSmart: () => void;
+  beginNodeRun: (nodeId: string, runId: string, startedAt?: number) => void;
+  appendNodeRunEvent: (nodeId: string, event: AgentEvent) => void;
 }
 
 export const useFlowStore = create<FlowState>((set, get) => ({
@@ -91,6 +98,54 @@ export const useFlowStore = create<FlowState>((set, get) => ({
 
   getChildCount: (parentId) => {
     return get().edges.filter((e) => e.source === parentId).length;
+  },
+
+  beginNodeRun: (nodeId, runId, startedAt = Date.now()) => {
+    set({
+      nodes: get().nodes.map((node) => {
+        if (node.id !== nodeId) return node;
+        const existingRuns = node.data.agentRuns ?? [];
+        if (existingRuns.some((run) => run.runId === runId)) return node;
+        const run: AgentRunRecord = {
+          runId,
+          status: 'queued',
+          startedAt,
+          events: [],
+        };
+        return {
+          ...node,
+          data: {
+            ...node.data,
+            agentRuns: [...existingRuns, run].slice(-MAX_RUNS_PER_NODE),
+          },
+        };
+      }),
+    });
+  },
+
+  appendNodeRunEvent: (nodeId, event) => {
+    if (event.nodeId !== nodeId) return;
+    set({
+      nodes: get().nodes.map((node) => {
+        if (node.id !== nodeId) return node;
+        const runs = node.data.agentRuns ?? [];
+        const runIndex = runs.findIndex((run) => run.runId === event.runId);
+        if (runIndex < 0) return node;
+        const run = runs[runIndex];
+        if (run.events.some((storedEvent) => storedEvent.eventId === event.eventId)) return node;
+        const updatedRun: AgentRunRecord = {
+          ...run,
+          status: statusAfterEvent(event.type),
+          finishedAt: isTerminalAgentEvent(event.type) ? event.timestamp : run.finishedAt,
+          events: [...run.events, event]
+            .sort((a, b) => a.sequence - b.sequence)
+            .slice(-MAX_EVENTS_PER_RUN),
+        };
+        const updatedRuns = [...runs];
+        updatedRuns[runIndex] = updatedRun;
+        return { ...node, data: { ...node.data, agentRuns: updatedRuns } };
+      }),
+    });
   },
 
   toggleCollapseSmart: () => {

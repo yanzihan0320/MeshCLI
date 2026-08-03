@@ -24,6 +24,9 @@ The frontend proxies `/api/llm` to this service during local development.
 
 - `POST /api/llm` streams a model response.
 - `POST /api/agent` streams canvas-aware assistant events with the selected provider.
+- `POST /api/node-runs` creates a node-bound execution run (mock adapter in Phase 2).
+- `GET /api/runs/:runId/events` replays and streams normalized run events over SSE.
+- `POST /api/runs/:runId/cancel` cancels an active run.
 - `GET /api/llm/config` returns non-secret configuration status.
 - `POST /api/llm/test` verifies the configured provider.
 - `GET /api/llm/models` proxies an OpenAI-compatible model list.

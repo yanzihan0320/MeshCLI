@@ -5,8 +5,11 @@ import { streamText } from 'ai';
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createOpenAI } from '@ai-sdk/openai';
 import { publicLLMConfig, resolveLLMConfig } from './llmConfig';
+import { AgentRunRequestSchema, isTerminalAgentEvent } from '../../../packages/protocol/src/agent';
+import { AgentRunManager, MockAgentAdapter } from './agentGateway';
 
 const app = new Hono();
+const agentRuns = new AgentRunManager(new MockAgentAdapter());
 
 app.use(
   '*',
@@ -230,10 +233,64 @@ Current capability boundary:
   });
 });
 
+// Node execution gateway. Phase 2 uses a deterministic adapter so the run
+// protocol, persistence, and UI can be exercised before OpenHands is connected.
+app.post('/api/node-runs', async (c) => {
+  const parsed = AgentRunRequestSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) {
+    return c.json({ error: 'Invalid node run request', issues: parsed.error.issues }, 400);
+  }
+  return c.json(agentRuns.create(parsed.data), 202);
+});
+
+app.get('/api/runs/:runId/events', (c) => {
+  const run = agentRuns.get(c.req.param('runId'));
+  if (!run) return c.json({ error: 'Run not found' }, 404);
+
+  const encoder = new TextEncoder();
+  const encode = (event: unknown) => encoder.encode(`data: ${JSON.stringify(event)}\n\n`);
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      let closed = false;
+      const close = () => {
+        if (closed) return;
+        closed = true;
+        unsubscribe?.();
+        controller.close();
+      };
+      const unsubscribe = agentRuns.subscribe(run.runId, (event) => {
+        if (closed) return;
+        controller.enqueue(encode(event));
+        if (isTerminalAgentEvent(event.type)) close();
+      });
+
+      for (const event of run.events) controller.enqueue(encode(event));
+      const lastEvent = run.events.at(-1);
+      if (lastEvent && isTerminalAgentEvent(lastEvent.type)) close();
+      c.req.raw.signal.addEventListener('abort', close, { once: true });
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-store',
+      'Connection': 'keep-alive',
+    },
+  });
+});
+
+app.post('/api/runs/:runId/cancel', (c) => {
+  if (!agentRuns.get(c.req.param('runId'))) return c.json({ error: 'Run not found' }, 404);
+  if (!agentRuns.cancel(c.req.param('runId'))) return c.json({ error: 'Run is already complete' }, 409);
+  return c.json({ status: 'cancelled' });
+});
+
 const port = Number(process.env.PORT ?? 4000);
 
 serve({ fetch: app.fetch, port }, () => {
   console.log(`BFF ready at http://localhost:${port}`);
   console.log(`LLM proxy: http://localhost:${port}/api/llm`);
   console.log(`Agent: http://localhost:${port}/api/agent`);
+  console.log(`Node runs: http://localhost:${port}/api/node-runs`);
 });

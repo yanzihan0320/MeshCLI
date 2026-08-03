@@ -164,6 +164,56 @@ describe('flowStore', () => {
     });
   });
 
+  describe('agent runs', () => {
+    it('stores ordered events on the matching node and ignores duplicates', () => {
+      const nodeId = useFlowStore.getState().addChatNode({ x: 0, y: 0 }, { topic: 'Agent task' });
+      useFlowStore.getState().beginNodeRun(nodeId, 'run-1', 100);
+
+      const startedEvent = {
+        version: 1 as const,
+        eventId: 'event-1',
+        runId: 'run-1',
+        nodeId,
+        sequence: 0,
+        timestamp: 101,
+        type: 'run_started' as const,
+        payload: { adapter: 'mock' },
+      };
+      useFlowStore.getState().appendNodeRunEvent(nodeId, startedEvent);
+      useFlowStore.getState().appendNodeRunEvent(nodeId, startedEvent);
+      useFlowStore.getState().appendNodeRunEvent(nodeId, {
+        ...startedEvent,
+        eventId: 'event-2',
+        sequence: 1,
+        timestamp: 102,
+        type: 'run_finished',
+      });
+
+      const run = useFlowStore.getState().nodes[0].data.agentRuns?.[0];
+      expect(run?.events).toHaveLength(2);
+      expect(run?.events.map((event) => event.type)).toEqual(['run_started', 'run_finished']);
+      expect(run?.status).toBe('finished');
+      expect(run?.finishedAt).toBe(102);
+    });
+
+    it('does not attach an event to the wrong node', () => {
+      const nodeId = useFlowStore.getState().addChatNode({ x: 0, y: 0 }, { topic: 'Agent task' });
+      useFlowStore.getState().beginNodeRun(nodeId, 'run-1');
+      useFlowStore.getState().appendNodeRunEvent(nodeId, {
+        version: 1,
+        eventId: 'event-1',
+        runId: 'run-1',
+        nodeId: 'another-node',
+        sequence: 0,
+        timestamp: 101,
+        type: 'run_started',
+        payload: {},
+      });
+
+      expect(useFlowStore.getState().nodes[0].data.agentRuns?.[0].events).toEqual([]);
+    });
+  });
+
   describe('updateNodeData', () => {
 
     it('updates node color', () => {

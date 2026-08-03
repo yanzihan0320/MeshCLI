@@ -150,6 +150,25 @@
   "branch": {
     "branchProposal": "分支提案"
   },
+  "agentRun": {
+    "title": "Agent 运行日志",
+    "run": "运行 Agent",
+    "stop": "停止",
+    "empty": "在输入框选择 Agent 并提交任务后，实时事件会显示在这里。",
+    "selectMode": "选择输入模式",
+    "chatMode": "普通对话",
+    "chatModeDescription": "继续当前节点中的对话",
+    "agentMode": "Agent",
+    "agentModeDescription": "通过 Agent Gateway 执行任务",
+    "promptPlaceholder": "描述希望 Agent 执行的任务...",
+    "status": {
+      "queued": "排队中",
+      "running": "运行中",
+      "finished": "已完成",
+      "failed": "失败",
+      "cancelled": "已取消"
+    }
+  },
   "chart": {
     "noData": "未提供图表数据。"
   },

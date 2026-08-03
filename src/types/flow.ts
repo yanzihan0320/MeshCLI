@@ -1,4 +1,5 @@
 import type { Node, Edge } from '@xyflow/react';
+import type { AgentRunRecord } from '../../packages/protocol/src/agent';
 
 export interface ChatNodeData {
   topic: string;
@@ -12,6 +13,7 @@ export interface ChatNodeData {
   [key: string]: unknown;
   color?: string
   label?: string
+  agentRuns?: AgentRunRecord[];
 }
 
 export type ChatNode = Node<ChatNodeData, 'chat'>;

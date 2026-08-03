@@ -18,8 +18,8 @@ MeshCLI is under active development. The repository currently contains a working
 | Node-local conversations | Available | Each node keeps its own messages and context |
 | Multi-workspace persistence | Available | Browser persistence plus JSON/Markdown export |
 | Canvas copilot | Prototype | CopilotKit + LangGraph can inspect and operate canvas state |
-| Agent Gateway and normalized events | Planned | Stable request, run, event, and approval contracts |
-| AG-UI-compatible run viewer | Planned | Streaming lifecycle, tool, command, file, and error events |
+| Agent Gateway and normalized events | Available | Versioned node-run contract, mock adapter, cancellation, and replayable SSE stream |
+| AG-UI-compatible run viewer | Prototype | Input-selectable Chat/Agent modes and a persistent node-local lifecycle log; tool and file events follow with Phase 3 |
 | Executable agent adapter | Planned | First adapter may target OpenHands; the core remains vendor-neutral |
 | A2UI-style interactive blocks | Planned | Checklist, confirmation, diff review, form, task board, comparison |
 | MCP tools and permission manager | Planned | Filesystem, GitHub, and browser/search integrations first |
@@ -131,7 +131,7 @@ MCP Tools / Skills / Workspace Sandbox
 
 ## Core contracts
 
-The planned adapter shape is intentionally small:
+The adapter boundary is intentionally small:
 
 ```ts
 interface AgentAdapter {
@@ -153,7 +153,7 @@ type A2UIBlock =
   | { type: "comparison_table"; columns: string[]; rows: string[][] };
 ```
 
-These contracts will live in a shared protocol package as the repository evolves, so the UI, gateway, adapters, and tests do not invent incompatible event shapes.
+The run and event contracts live in `packages/protocol`; future A2UI contracts should join them so the UI, gateway, adapters, and tests do not invent incompatible shapes.
 
 ## Safety model
 
@@ -179,6 +179,8 @@ Keep the working canvas, formalize node data, retain branch and merge, add the m
 **Done when:** selected text can create a node, a node can continue its own conversation, and multiple nodes can merge predictably.
 
 ### Phase 2 — Gateway and run events
+
+**Status: complete for the mock-execution milestone.**
 
 Define versioned run/event schemas, create the Agent Gateway, stream events with SSE, persist events to the correct node, and render a basic run log.
 
@@ -227,6 +229,8 @@ apps/
   agent/              Current Python LangGraph agent prototype
   bff/                Current Hono backend-for-frontend
   mcp/                Reserved MCP integration area
+packages/
+  protocol/           Shared, runtime-validated run and event contracts
 bin/                  CLI entry point
 ```
 
