@@ -188,12 +188,19 @@ describe('flowStore', () => {
         timestamp: 102,
         type: 'run_finished',
       });
+      useFlowStore.getState().appendNodeRunEvent(nodeId, {
+        ...startedEvent,
+        eventId: 'event-3',
+        sequence: 2,
+        timestamp: 103,
+        type: 'review_ready',
+      });
 
       const run = useFlowStore.getState().nodes[0].data.agentRuns?.[0];
-      expect(run?.events).toHaveLength(2);
-      expect(run?.events.map((event) => event.type)).toEqual(['run_started', 'run_finished']);
-      expect(run?.status).toBe('finished');
-      expect(run?.finishedAt).toBe(102);
+      expect(run?.events).toHaveLength(3);
+      expect(run?.events.map((event) => event.type)).toEqual(['run_started', 'run_finished', 'review_ready']);
+      expect(run?.status).toBe('review_ready');
+      expect(run?.finishedAt).toBe(103);
     });
 
     it('does not attach an event to the wrong node', () => {

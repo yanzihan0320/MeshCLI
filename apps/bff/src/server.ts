@@ -7,9 +7,13 @@ import { createOpenAI } from '@ai-sdk/openai';
 import { publicLLMConfig, resolveLLMConfig } from './llmConfig';
 import { AgentRunRequestSchema, isTerminalAgentEvent } from '../../../packages/protocol/src/agent';
 import { AgentRunManager, MockAgentAdapter } from './agentGateway';
+import { OpenHandsAdapter } from './openHandsAdapter';
 
 const app = new Hono();
-const agentRuns = new AgentRunManager(new MockAgentAdapter());
+const configuredAdapter = (process.env.AGENT_ADAPTER ?? 'openhands') === 'mock'
+  ? new MockAgentAdapter()
+  : new OpenHandsAdapter();
+const agentRuns = new AgentRunManager(configuredAdapter);
 
 app.use(
   '*',
@@ -233,8 +237,8 @@ Current capability boundary:
   });
 });
 
-// Node execution gateway. Phase 2 uses a deterministic adapter so the run
-// protocol, persistence, and UI can be exercised before OpenHands is connected.
+// Node execution gateway. OpenHands runs against an isolated managed copy and
+// the Gateway alone may apply an approved patch to the real project.
 app.post('/api/node-runs', async (c) => {
   const parsed = AgentRunRequestSchema.safeParse(await c.req.json().catch(() => null));
   if (!parsed.success) {
@@ -280,10 +284,25 @@ app.get('/api/runs/:runId/events', (c) => {
   });
 });
 
-app.post('/api/runs/:runId/cancel', (c) => {
+app.post('/api/runs/:runId/cancel', async (c) => {
   if (!agentRuns.get(c.req.param('runId'))) return c.json({ error: 'Run not found' }, 404);
-  if (!agentRuns.cancel(c.req.param('runId'))) return c.json({ error: 'Run is already complete' }, 409);
+  const cancelled = await agentRuns.cancel(c.req.param('runId'));
+  if (!cancelled) return c.json({ error: 'Run is already complete' }, 409);
   return c.json({ status: 'cancelled' });
+});
+
+app.post('/api/runs/:runId/apply', async (c) => {
+  if (!agentRuns.get(c.req.param('runId'))) return c.json({ error: 'Run not found' }, 404);
+  const event = await agentRuns.apply(c.req.param('runId'));
+  if (!event) return c.json({ error: 'Run is not ready to apply' }, 409);
+  return c.json(event, event.type === 'patch_conflict' ? 409 : 200);
+});
+
+app.post('/api/runs/:runId/reject', async (c) => {
+  if (!agentRuns.get(c.req.param('runId'))) return c.json({ error: 'Run not found' }, 404);
+  const event = await agentRuns.reject(c.req.param('runId'));
+  if (!event) return c.json({ error: 'Run is not ready to reject' }, 409);
+  return c.json(event);
 });
 
 const port = Number(process.env.PORT ?? 4000);
@@ -293,4 +312,5 @@ serve({ fetch: app.fetch, port }, () => {
   console.log(`LLM proxy: http://localhost:${port}/api/llm`);
   console.log(`Agent: http://localhost:${port}/api/agent`);
   console.log(`Node runs: http://localhost:${port}/api/node-runs`);
+  console.log(`Execution adapter: ${configuredAdapter.name}`);
 });

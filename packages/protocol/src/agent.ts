@@ -5,10 +5,18 @@ export const AGENT_EVENT_TYPES = [
   'text_delta',
   'plan_updated',
   'tool_started',
+  'command_started',
   'command_output',
+  'command_finished',
+  'file_changed',
   'file_change_proposed',
+  'change_set_created',
+  'review_ready',
   'permission_required',
   'permission_resolved',
+  'patch_applied',
+  'patch_rejected',
+  'patch_conflict',
   'run_finished',
   'run_failed',
   'run_cancelled',
@@ -54,9 +62,36 @@ export const AgentRunCreatedSchema = z.object({
 
 export type AgentRunCreated = z.infer<typeof AgentRunCreatedSchema>;
 
+export const ChangedFileSchema = z.object({
+  path: z.string().min(1),
+  status: z.enum(['added', 'modified', 'deleted', 'renamed', 'binary']),
+  additions: z.number().int().nonnegative().nullable(),
+  deletions: z.number().int().nonnegative().nullable(),
+});
+
+export type ChangedFile = z.infer<typeof ChangedFileSchema>;
+
+export const ChangeSetSchema = z.object({
+  changeSetId: z.string().min(1),
+  runId: z.string().min(1),
+  baseCommit: z.string().regex(/^[0-9a-f]{40}$/i),
+  files: z.array(ChangedFileSchema),
+  diff: z.string(),
+  truncated: z.boolean().default(false),
+  createdAt: z.number().int().nonnegative(),
+});
+
+export type ChangeSet = z.infer<typeof ChangeSetSchema>;
+
 export type AgentRunStatus =
   | 'queued'
+  | 'preparing'
   | 'running'
+  | 'review_ready'
+  | 'applying'
+  | 'applied'
+  | 'rejected'
+  | 'conflicted'
   | 'finished'
   | 'failed'
   | 'cancelled';
@@ -67,15 +102,25 @@ export interface AgentRunRecord {
   startedAt: number;
   finishedAt?: number;
   events: AgentEvent[];
+  changeSet?: ChangeSet;
 }
 
 export function statusAfterEvent(type: AgentEventType): AgentRunStatus {
-  if (type === 'run_finished') return 'finished';
+  if (type === 'review_ready') return 'review_ready';
+  if (type === 'patch_applied') return 'applied';
+  if (type === 'patch_rejected') return 'rejected';
+  if (type === 'patch_conflict') return 'conflicted';
+  if (type === 'run_finished') return 'running';
   if (type === 'run_failed') return 'failed';
   if (type === 'run_cancelled') return 'cancelled';
   return 'running';
 }
 
 export function isTerminalAgentEvent(type: AgentEventType): boolean {
-  return type === 'run_finished' || type === 'run_failed' || type === 'run_cancelled';
+  return type === 'review_ready'
+    || type === 'patch_applied'
+    || type === 'patch_rejected'
+    || type === 'patch_conflict'
+    || type === 'run_failed'
+    || type === 'run_cancelled';
 }

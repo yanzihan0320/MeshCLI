@@ -53,4 +53,23 @@ describe('NodeRunClient', () => {
     await new NodeRunClient().streamEvents('run-1', (received) => events.push(received));
     expect(events).toEqual([event]);
   });
+
+  it('returns the normalized event produced by a review action', async () => {
+    const event = {
+      version: 1,
+      eventId: 'event-apply',
+      runId: 'run-1',
+      nodeId: 'node-1',
+      sequence: 4,
+      timestamp: 200,
+      type: 'patch_applied',
+      payload: { changeSetId: 'change-1' },
+    };
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify(event), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    })));
+
+    await expect(new NodeRunClient().reviewRun('run-1', 'apply')).resolves.toEqual(event);
+  });
 });

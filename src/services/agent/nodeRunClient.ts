@@ -66,6 +66,21 @@ export class NodeRunClient {
     });
     if (!response.ok && response.status !== 409) throw new Error(await responseError(response));
   }
+
+  async reviewRun(runId: string, action: 'apply' | 'reject'): Promise<AgentEvent> {
+    const response = await fetch(`/api/runs/${encodeURIComponent(runId)}/${action}`, {
+      method: 'POST',
+    });
+    const body = await response.json().catch(() => null);
+    const parsed = AgentEventSchema.safeParse(body);
+    if (parsed.success) return parsed.data;
+    if (!response.ok) throw new Error(await responseError(new Response(JSON.stringify(body), {
+      status: response.status,
+      statusText: response.statusText,
+      headers: { 'Content-Type': 'application/json' },
+    })));
+    throw new Error('Gateway returned an invalid review event.');
+  }
 }
 
 export const nodeRunClient = new NodeRunClient();

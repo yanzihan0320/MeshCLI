@@ -610,7 +610,10 @@ export function ChatNodeComponent({ id, data, selected }: NodeProps<ChatNode>) {
         run={agentRun.latestRun}
         isRunning={agentRun.isRunning}
         clientError={agentRun.clientError}
+        isReviewing={agentRun.isReviewing}
         onCancel={agentRun.cancelRun}
+        onApply={agentRun.applyRun}
+        onReject={agentRun.rejectRun}
       />
       <ChatMessageList nodeId={id} onExplore={handleExplore} />
       <ChatInput

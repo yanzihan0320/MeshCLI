@@ -17,16 +17,30 @@ endpoint host; it never returns the API key to the browser.
 Run it from the repository root:
 
 ```bash
+npm run install:openhands
 npm run dev:bff
 ```
+
+Docker Desktop must be running for the default `AGENT_WORKSPACE_MODE=docker`.
+`AGENT_WORKSPACE_ROOT` must point to a clean Git working tree. The Gateway clones
+that repository per run; the real directory is never mounted into the Agent
+container.
 
 The frontend proxies `/api/llm` to this service during local development.
 
 - `POST /api/llm` streams a model response.
 - `POST /api/agent` streams canvas-aware assistant events with the selected provider.
-- `POST /api/node-runs` creates a node-bound execution run (mock adapter in Phase 2).
+- `POST /api/node-runs` creates a node-bound OpenHands execution run.
 - `GET /api/runs/:runId/events` replays and streams normalized run events over SSE.
 - `POST /api/runs/:runId/cancel` cancels an active run.
+- `POST /api/runs/:runId/apply` validates and applies the run's patch.
+- `POST /api/runs/:runId/reject` discards the managed copy without changing the real project.
 - `GET /api/llm/config` returns non-secret configuration status.
 - `POST /api/llm/test` verifies the configured provider.
 - `GET /api/llm/models` proxies an OpenAI-compatible model list.
+
+Run the isolated Docker end-to-end check with:
+
+```bash
+npm run smoke:openhands
+```

@@ -8,6 +8,7 @@ const EMPTY_RUNS = [] as const;
 
 export function useNodeAgentRun(nodeId: string, topic: string) {
   const [clientError, setClientError] = useState<string>();
+  const [isReviewing, setIsReviewing] = useState(false);
   const streamControllerRef = useRef<AbortController | undefined>(undefined);
   const runs = useFlowStore((state) =>
     state.nodes.find((node) => node.id === nodeId)?.data.agentRuns ?? EMPTY_RUNS
@@ -59,11 +60,31 @@ export function useNodeAgentRun(nodeId: string, topic: string) {
     }
   }, [isRunning, latestRun]);
 
+  const reviewRun = useCallback(async (action: 'apply' | 'reject') => {
+    if (!latestRun || latestRun.status !== 'review_ready' || isReviewing) return;
+    setClientError(undefined);
+    setIsReviewing(true);
+    try {
+      const event = await nodeRunClient.reviewRun(latestRun.runId, action);
+      useFlowStore.getState().appendNodeRunEvent(nodeId, event);
+      if (event.type === 'patch_conflict') {
+        setClientError(String(event.payload.error ?? 'Patch could not be applied.'));
+      }
+    } catch (error) {
+      setClientError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setIsReviewing(false);
+    }
+  }, [isReviewing, latestRun, nodeId]);
+
   return {
     latestRun,
     isRunning,
     clientError,
+    isReviewing,
     startRun,
     cancelRun,
+    applyRun: () => reviewRun('apply'),
+    rejectRun: () => reviewRun('reject'),
   };
 }

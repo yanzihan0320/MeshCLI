@@ -9,7 +9,7 @@ import {
 import { nanoid } from 'nanoid';
 import type { ChatNode, ChatNodeData, TopicEdge } from '../types/flow';
 import type { AgentEvent, AgentRunRecord } from '../../packages/protocol/src/agent';
-import { isTerminalAgentEvent, statusAfterEvent } from '../../packages/protocol/src/agent';
+import { ChangeSetSchema, isTerminalAgentEvent, statusAfterEvent } from '../../packages/protocol/src/agent';
 
 const MAX_RUNS_PER_NODE = 10;
 const MAX_EVENTS_PER_RUN = 1_000;
@@ -133,10 +133,14 @@ export const useFlowStore = create<FlowState>((set, get) => ({
         if (runIndex < 0) return node;
         const run = runs[runIndex];
         if (run.events.some((storedEvent) => storedEvent.eventId === event.eventId)) return node;
+        const parsedChangeSet = event.type === 'change_set_created'
+          ? ChangeSetSchema.safeParse(event.payload.changeSet)
+          : undefined;
         const updatedRun: AgentRunRecord = {
           ...run,
           status: statusAfterEvent(event.type),
           finishedAt: isTerminalAgentEvent(event.type) ? event.timestamp : run.finishedAt,
+          changeSet: parsedChangeSet?.success ? parsedChangeSet.data : run.changeSet,
           events: [...run.events, event]
             .sort((a, b) => a.sequence - b.sequence)
             .slice(-MAX_EVENTS_PER_RUN),

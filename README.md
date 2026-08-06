@@ -8,7 +8,7 @@ MeshCLI is a visual Agent workspace built on the CaudalFlow canvas. It lets user
 
 ## Project status
 
-MeshCLI is under active development. The repository currently contains a working CaudalFlow-derived conversation canvas and an early CopilotKit/LangGraph integration. The execution platform described below is the target MVP architecture, not a claim that every component is complete.
+MeshCLI is under active development. The repository contains a working CaudalFlow-derived conversation canvas, an early CopilotKit/LangGraph integration, and the first sandboxed execution adapter. Capabilities still marked planned below are architecture targets rather than implemented behavior.
 
 | Capability | Status | Notes |
 | --- | --- | --- |
@@ -18,9 +18,9 @@ MeshCLI is under active development. The repository currently contains a working
 | Node-local conversations | Available | Each node keeps its own messages and context |
 | Multi-workspace persistence | Available | Browser persistence plus JSON/Markdown export |
 | Canvas copilot | Prototype | CopilotKit + LangGraph can inspect and operate canvas state |
-| Agent Gateway and normalized events | Available | Versioned node-run contract, mock adapter, cancellation, and replayable SSE stream |
-| AG-UI-compatible run viewer | Prototype | Input-selectable Chat/Agent modes and a persistent node-local lifecycle log; tool and file events follow with Phase 3 |
-| Executable agent adapter | Planned | First adapter may target OpenHands; the core remains vendor-neutral |
+| Agent Gateway and normalized events | Available | Versioned node-run contract, OpenHands adapter, cancellation, and replayable SSE stream |
+| AG-UI-compatible run viewer | Available | Chat/Agent modes, command and file events, Changed Files, unified diff, Apply All, and Reject All |
+| Executable agent adapter | Available | OpenHands SDK + DockerWorkspace; the adapter contract remains vendor-neutral |
 | A2UI-style interactive blocks | Planned | Checklist, confirmation, diff review, form, task board, comparison |
 | MCP tools and permission manager | Planned | Filesystem, GitHub, and browser/search integrations first |
 | Audit log, checkpoints, rollback | Planned | Required before broad autonomous execution |
@@ -188,11 +188,15 @@ Define versioned run/event schemas, create the Agent Gateway, stream events with
 
 ### Phase 3 — First execution adapter
 
-Implement the adapter interface and connect an OpenHands-based or equivalent sandboxed runtime. Map plans, commands, observations, and proposed file changes into MeshCLI events.
+**Status: complete for the OpenHands DockerWorkspace MVP.**
+
+The OpenHands adapter maps messages, plans, commands, observations, and file changes into MeshCLI events. Every run clones a clean Git project into a managed copy, mounts only that copy into Docker, creates a binary-safe patch, and waits for Apply All or Reject All before the Gateway can touch the real project.
 
 **Done when:** a node can analyze a real repository and propose a change without silently applying protected operations.
 
 ### Phase 4 — Interactive result renderer
+
+**Status: partial. Changed Files and whole-change-set review are available.**
 
 Implement confirmation, diff review, checklist, form, task board, and comparison blocks with schema validation and accessible fallback text.
 

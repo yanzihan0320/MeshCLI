@@ -40,6 +40,8 @@ coverage
 # Python / local agent runtime
 .venv/
 __pycache__/
+.pytest_cache/
 *.pyc
 .langgraph_api/
+.meshcli/
 .vercel

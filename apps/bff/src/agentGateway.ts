@@ -5,17 +5,30 @@ import type {
   AgentRunCreated,
   AgentRunRequest,
   AgentRunStatus,
+  ChangeSet,
 } from '../../../packages/protocol/src/agent';
-import { isTerminalAgentEvent, statusAfterEvent } from '../../../packages/protocol/src/agent';
+import { ChangeSetSchema, isTerminalAgentEvent, statusAfterEvent } from '../../../packages/protocol/src/agent';
 
 export interface AdapterEvent {
   type: AgentEventType;
   payload: Record<string, unknown>;
 }
 
+export interface AgentRunContext {
+  runId: string;
+}
+
+export interface AdapterReviewResult {
+  changeSet: ChangeSet;
+  event: AdapterEvent;
+}
+
 export interface AgentAdapter {
   readonly name: string;
-  run(input: AgentRunRequest, signal: AbortSignal): AsyncIterable<AdapterEvent>;
+  run(input: AgentRunRequest, signal: AbortSignal, context: AgentRunContext): AsyncIterable<AdapterEvent>;
+  apply?(runId: string): Promise<AdapterReviewResult>;
+  reject?(runId: string): Promise<AdapterReviewResult>;
+  cancel?(runId: string): Promise<void>;
 }
 
 const delay = (milliseconds: number, signal: AbortSignal) => new Promise<void>((resolve, reject) => {
@@ -48,6 +61,10 @@ export class MockAgentAdapter implements AgentAdapter {
       type: 'run_finished',
       payload: { adapter: this.name, summary: 'Mock run completed successfully.' },
     };
+    yield {
+      type: 'review_ready',
+      payload: { fileCount: 0, message: 'Mock run completed with no file changes.' },
+    };
   }
 }
 
@@ -57,6 +74,7 @@ interface StoredRun {
   workspaceId: string;
   status: AgentRunStatus;
   events: AgentEvent[];
+  changeSet?: ChangeSet;
   controller: AbortController;
   subscribers: Set<(event: AgentEvent) => void>;
   createdAt: number;
@@ -98,19 +116,43 @@ export class AgentRunManager {
     return () => run.subscribers.delete(subscriber);
   }
 
-  cancel(runId: string): boolean {
+  async cancel(runId: string): Promise<boolean> {
     const run = this.runs.get(runId);
-    if (!run || run.status === 'finished' || run.status === 'failed' || run.status === 'cancelled') {
+    if (!run || ['applied', 'rejected', 'conflicted', 'finished', 'failed', 'cancelled'].includes(run.status)) {
       return false;
     }
     run.controller.abort();
+    await this.adapter.cancel?.(runId).catch(() => undefined);
     this.append(run, 'run_cancelled', { reason: 'Cancelled by user' });
     return true;
   }
 
+  async apply(runId: string): Promise<AgentEvent | undefined> {
+    const run = this.runs.get(runId);
+    if (!run || run.status !== 'review_ready' || !this.adapter.apply) return undefined;
+    run.status = 'applying';
+    try {
+      const result = await this.adapter.apply(runId);
+      run.changeSet = result.changeSet;
+      return this.append(run, result.event.type, result.event.payload);
+    } catch (error) {
+      return this.append(run, 'patch_conflict', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  async reject(runId: string): Promise<AgentEvent | undefined> {
+    const run = this.runs.get(runId);
+    if (!run || run.status !== 'review_ready' || !this.adapter.reject) return undefined;
+    const result = await this.adapter.reject(runId);
+    run.changeSet = result.changeSet;
+    return this.append(run, result.event.type, result.event.payload);
+  }
+
   private async execute(run: StoredRun, input: AgentRunRequest): Promise<void> {
     try {
-      for await (const event of this.adapter.run(input, run.controller.signal)) {
+      for await (const event of this.adapter.run(input, run.controller.signal, { runId: run.runId })) {
         if (run.controller.signal.aborted) break;
         this.append(run, event.type, event.payload);
       }
@@ -123,9 +165,17 @@ export class AgentRunManager {
     }
   }
 
-  private append(run: StoredRun, type: AgentEventType, payload: Record<string, unknown>): void {
-    if (isTerminalAgentEvent(type) && isTerminalAgentEvent(run.events.at(-1)?.type ?? 'run_started')) {
-      return;
+  private append(run: StoredRun, type: AgentEventType, payload: Record<string, unknown>): AgentEvent {
+    const lastType = run.events.at(-1)?.type;
+    const finalTypes: AgentEventType[] = [
+      'patch_applied',
+      'patch_rejected',
+      'patch_conflict',
+      'run_failed',
+      'run_cancelled',
+    ];
+    if (isTerminalAgentEvent(type) && lastType && finalTypes.includes(lastType)) {
+      return run.events.at(-1)!;
     }
     const event: AgentEvent = {
       version: 1,
@@ -138,14 +188,19 @@ export class AgentRunManager {
       payload,
     };
     run.status = statusAfterEvent(type);
+    if (type === 'change_set_created') {
+      const parsed = ChangeSetSchema.safeParse(payload.changeSet);
+      if (parsed.success) run.changeSet = parsed.data;
+    }
     run.events.push(event);
     for (const subscriber of run.subscribers) subscriber(event);
+    return event;
   }
 
   private trimRetainedRuns(): void {
     if (this.runs.size <= MAX_RETAINED_RUNS) return;
     const terminalRuns = [...this.runs.values()]
-      .filter((run) => run.status === 'finished' || run.status === 'failed' || run.status === 'cancelled')
+      .filter((run) => ['applied', 'rejected', 'conflicted', 'finished', 'failed', 'cancelled'].includes(run.status))
       .sort((a, b) => a.createdAt - b.createdAt);
     for (const run of terminalRuns) {
       if (this.runs.size <= MAX_RETAINED_RUNS) break;
