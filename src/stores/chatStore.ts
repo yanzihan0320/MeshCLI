@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { nanoid } from 'nanoid';
 import type { ChatMessage, Conversation, MessageRole } from '../types/chat';
+import type { A2UIBlock } from '../../packages/protocol/src/a2ui';
 
 export interface ActiveNodeContext {
   nodeId: string;
@@ -25,6 +26,9 @@ interface ChatState {
   setConversations: (conversations: Record<string, Conversation>) => void;
   setConversationMessages: (nodeId: string, messages: ChatMessage[]) => void;
   addOrUpdateMessage: (nodeId: string, message: ChatMessage) => void;
+  setMessageBlocks: (nodeId: string, messageId: string, blocks: A2UIBlock[]) => void;
+  setMessagePresentation: (nodeId: string, messageId: string, content: string, blocks: A2UIBlock[]) => void;
+  updateMessageBlock: (nodeId: string, messageId: string, block: A2UIBlock) => void;
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
@@ -116,6 +120,61 @@ export const useChatStore = create<ChatState>((set, get) => ({
       conversations: {
         ...get().conversations,
         [nodeId]: { ...conv, messages },
+      },
+    });
+  },
+
+  setMessageBlocks: (nodeId, messageId, blocks) => {
+    const conv = get().conversations[nodeId];
+    if (!conv) return;
+    set({
+      conversations: {
+        ...get().conversations,
+        [nodeId]: {
+          ...conv,
+          messages: conv.messages.map((message) => (
+            message.id === messageId ? { ...message, blocks } : message
+          )),
+        },
+      },
+    });
+  },
+
+  setMessagePresentation: (nodeId, messageId, content, blocks) => {
+    const conv = get().conversations[nodeId];
+    if (!conv) return;
+    set({
+      conversations: {
+        ...get().conversations,
+        [nodeId]: {
+          ...conv,
+          messages: conv.messages.map((message) => (
+            message.id === messageId ? { ...message, content, blocks } : message
+          )),
+        },
+      },
+    });
+  },
+
+  updateMessageBlock: (nodeId, messageId, block) => {
+    const conv = get().conversations[nodeId];
+    if (!conv) return;
+    set({
+      conversations: {
+        ...get().conversations,
+        [nodeId]: {
+          ...conv,
+          messages: conv.messages.map((message) => (
+            message.id === messageId
+              ? {
+                  ...message,
+                  blocks: (message.blocks ?? []).map((candidate) => (
+                    candidate.id === block.id ? block : candidate
+                  )),
+                }
+              : message
+          )),
+        },
       },
     });
   },

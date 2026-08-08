@@ -1,7 +1,8 @@
 import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
-import { isAbsolute, relative, resolve, sep } from 'node:path';
+import { createHash } from 'node:crypto';
+import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
 import { promisify } from 'node:util';
 import type { ChangeSet, ChangedFile } from '../../../packages/protocol/src/agent';
 
@@ -16,7 +17,15 @@ export interface ManagedRunWorkspace {
   persistencePath: string;
   patchPath: string;
   baseCommit: string;
+  sourceFingerprint: string;
   changeSet?: ChangeSet;
+}
+
+interface SourceSnapshot {
+  head: string;
+  trackedPatch: string;
+  untracked: Array<{ path: string; content: Buffer }>;
+  fingerprint: string;
 }
 
 function assertInside(parent: string, child: string): void {
@@ -81,12 +90,14 @@ export class WorkspaceManager {
     const existing = this.runs.get(runId);
     if (existing) return existing;
     await this.git(['rev-parse', '--is-inside-work-tree'], this.sourceRoot, signal);
-    if ((process.env.AGENT_REQUIRE_CLEAN_WORKTREE ?? 'true') !== 'false') {
+    const requireClean = (process.env.AGENT_REQUIRE_CLEAN_WORKTREE ?? 'false') === 'true';
+    if (requireClean) {
       const status = await this.git(['status', '--porcelain=v1', '--untracked-files=normal'], this.sourceRoot, signal);
       if (status.trim()) {
         throw new Error('The real project has uncommitted changes. Commit or stash them before running an Agent.');
       }
     }
+    const snapshot = await this.captureSourceSnapshot(signal);
 
     const runRoot = resolve(this.runsRoot, runId);
     const workspacePath = resolve(runRoot, 'workspace');
@@ -94,11 +105,30 @@ export class WorkspaceManager {
     assertInside(runRoot, workspacePath);
     await mkdir(runRoot, { recursive: true });
     await this.git(
-      ['clone', '--local', '--no-hardlinks', '--no-recurse-submodules', '--quiet', this.sourceRoot, workspacePath],
+      ['-c', 'core.autocrlf=false', 'clone', '--local', '--no-hardlinks', '--no-recurse-submodules', '--quiet', this.sourceRoot, workspacePath],
       this.sourceRoot,
       signal,
     );
-    const baseCommit = (await this.git(['rev-parse', 'HEAD'], workspacePath, signal)).trim();
+    if (snapshot.trackedPatch.trim()) {
+      const baselinePatchPath = resolve(runRoot, 'baseline.patch');
+      await writeFile(baselinePatchPath, snapshot.trackedPatch, 'utf8');
+      await this.git(['apply', '--whitespace=nowarn', baselinePatchPath], workspacePath, signal);
+    }
+    for (const file of snapshot.untracked) {
+      validatePatchPath(file.path);
+      const target = resolve(workspacePath, file.path);
+      assertInside(workspacePath, target);
+      await mkdir(dirname(target), { recursive: true });
+      await writeFile(target, file.content);
+    }
+    if (snapshot.trackedPatch.trim() || snapshot.untracked.length) {
+      await this.git(['add', '--all'], workspacePath, signal);
+      await this.git([
+        '-c', 'user.name=MeshCLI Snapshot',
+        '-c', 'user.email=meshcli@example.invalid',
+        'commit', '--quiet', '-m', 'MeshCLI run baseline',
+      ], workspacePath, signal);
+    }
     const managed: ManagedRunWorkspace = {
       runId,
       sourceRoot: this.sourceRoot,
@@ -106,7 +136,8 @@ export class WorkspaceManager {
       workspacePath,
       persistencePath: resolve(runRoot, 'conversation'),
       patchPath: resolve(runRoot, 'change.patch'),
-      baseCommit,
+      baseCommit: snapshot.head,
+      sourceFingerprint: snapshot.fingerprint,
     };
     this.runs.set(runId, managed);
     return managed;
@@ -170,8 +201,10 @@ export class WorkspaceManager {
     if (currentCommit !== managed.baseCommit) {
       throw new Error('The real project base commit changed after the run started.');
     }
-    const status = await this.git(['status', '--porcelain=v1', '--untracked-files=normal'], this.sourceRoot);
-    if (status.trim()) throw new Error('The real project is no longer clean; patch was not applied.');
+    const currentSnapshot = await this.captureSourceSnapshot();
+    if (currentSnapshot.fingerprint !== managed.sourceFingerprint) {
+      throw new Error('The real project changed after this Agent run started; patch was not applied.');
+    }
     const patch = await readFile(managed.patchPath, 'utf8');
     if (patch.trim()) {
       await this.git(['apply', '--check', '--whitespace=nowarn', managed.patchPath], this.sourceRoot);
@@ -202,6 +235,27 @@ export class WorkspaceManager {
   private async cleanupWorkspace(managed: ManagedRunWorkspace): Promise<void> {
     assertInside(managed.runRoot, managed.workspacePath);
     await rm(managed.workspacePath, { recursive: true, force: true });
+  }
+
+  private async captureSourceSnapshot(signal?: AbortSignal): Promise<SourceSnapshot> {
+    const head = (await this.git(['rev-parse', 'HEAD'], this.sourceRoot, signal)).trim();
+    const trackedPatch = await this.git(
+      ['diff', '--binary', '--full-index', '--no-ext-diff', '--no-color', 'HEAD', '--'],
+      this.sourceRoot,
+      signal,
+      64 * 1024 * 1024,
+    );
+    const rawPaths = await this.git(['ls-files', '--others', '--exclude-standard', '-z'], this.sourceRoot, signal);
+    const untracked = [] as Array<{ path: string; content: Buffer }>;
+    for (const path of rawPaths.split('\0').filter(Boolean).sort()) {
+      validatePatchPath(path);
+      const absolutePath = resolve(this.sourceRoot, path);
+      assertInside(this.sourceRoot, absolutePath);
+      untracked.push({ path: path.replaceAll('\\', '/'), content: await readFile(absolutePath) });
+    }
+    const hash = createHash('sha256').update(head).update('\0').update(trackedPatch);
+    for (const file of untracked) hash.update('\0').update(file.path).update('\0').update(file.content);
+    return { head, trackedPatch, untracked, fingerprint: hash.digest('hex') };
   }
 
   private async git(

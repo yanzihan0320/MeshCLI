@@ -1,3 +1,5 @@
+import type { A2UIBlock } from '../../packages/protocol/src/a2ui';
+
 export type MessageRole = 'user' | 'assistant' | 'system';
 
 export interface ChatMessage {
@@ -10,6 +12,7 @@ export interface ChatMessage {
     mimeType: string;
   }[];
   triggeredBy?: string;
+  blocks?: A2UIBlock[];
 }
 
 export interface Conversation {

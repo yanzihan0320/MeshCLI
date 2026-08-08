@@ -329,4 +329,49 @@ describe('chatStore', () => {
       expect(msg.triggeredBy).toBe('node-2');
     });
   });
+
+  describe('interactive message blocks', () => {
+    it('atomically replaces streamed markdown with an explanation presentation', () => {
+      useChatStore.getState().initConversation('node-1');
+      const messageId = useChatStore.getState().addMessage('node-1', 'assistant', '- One\n- Two');
+      const map = {
+        version: 1 as const,
+        id: 'map-1',
+        type: 'mind_map' as const,
+        title: 'Ideas',
+        fallbackText: 'Ideas',
+        layout: 'tree' as const,
+        root: { id: 'root', label: 'Ideas', kind: 'topic' as const, children: [] },
+      };
+      useChatStore.getState().setMessagePresentation('node-1', messageId, 'Structured view below.', [map]);
+      expect(useChatStore.getState().getMessages('node-1')[0]).toMatchObject({
+        content: 'Structured view below.',
+        blocks: [{ type: 'mind_map' }],
+      });
+    });
+
+    it('persists and updates a message-owned task board', () => {
+      useChatStore.getState().initConversation('node-1');
+      const messageId = useChatStore.getState().addMessage('node-1', 'assistant', 'Plan');
+      const board = {
+        version: 1 as const,
+        id: 'board-1',
+        type: 'task_board' as const,
+        title: 'Plan',
+        fallbackText: 'Plan',
+        columns: [{ id: 'todo', title: 'To do', tasks: [] }],
+      };
+      useChatStore.getState().setMessageBlocks('node-1', messageId, [board]);
+      useChatStore.getState().updateMessageBlock('node-1', messageId, {
+        ...board,
+        columns: [{ id: 'todo', title: 'To do', tasks: [{
+          id: 'task-1', title: 'Implement', priority: 'medium', sourceNodeIds: [], dependencies: [],
+        }] }],
+      });
+      expect(useChatStore.getState().getMessages('node-1')[0].blocks?.[0]).toMatchObject({
+        id: 'board-1',
+        columns: [expect.objectContaining({ tasks: [expect.objectContaining({ id: 'task-1' })] })],
+      });
+    });
+  });
 });

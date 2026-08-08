@@ -22,7 +22,9 @@ npm run dev:bff
 ```
 
 Docker Desktop must be running for the default `AGENT_WORKSPACE_MODE=docker`.
-`AGENT_WORKSPACE_ROOT` must point to a clean Git working tree. The Gateway clones
+`AGENT_WORKSPACE_ROOT` must point to a Git working tree. The Gateway snapshots
+tracked and untracked user changes into the isolated run baseline, so a commit is
+not required before every run. The Gateway clones
 that repository per run; the real directory is never mounted into the Agent
 container.
 

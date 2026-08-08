@@ -5,6 +5,7 @@ import { getRootSystemPrompt, getBranchSystemPrompt, getMergeSystemPrompt } from
 import { useFlowStore } from '../stores/flowStore';
 import type { ChatMessage } from '../types/chat';
 import { validateImage, fileToBase64 } from '../utils/image';
+import { deriveExplanationPresentation } from '../services/explanationBlocks';
 
 export function useChatNode(nodeId: string, topic: string, parentNodeId?: string, branchText?: string, parentNodeIds?: string[], mergeAction?: string) {
   const abortRef = useRef<AbortController | null>(null);
@@ -58,7 +59,7 @@ export function useChatNode(nodeId: string, topic: string, parentNodeId?: string
       ];
 
       // Create placeholder assistant message
-      store.addMessage(nodeId, 'assistant', '');
+      const assistantMessageId = store.addMessage(nodeId, 'assistant', '');
       store.setStreaming(nodeId, true);
 
       // Cancel previous stream
@@ -73,7 +74,11 @@ export function useChatNode(nodeId: string, topic: string, parentNodeId?: string
             useChatStore.getState().appendToLastMessage(nodeId, token);
           },
           onDone: () => {
-            useChatStore.getState().setStreaming(nodeId, false);
+            const currentStore = useChatStore.getState();
+            const answer = currentStore.getMessages(nodeId).find((message) => message.id === assistantMessageId)?.content ?? '';
+            const presentation = deriveExplanationPresentation(answer, topic);
+            currentStore.setMessagePresentation(nodeId, assistantMessageId, presentation.content, presentation.blocks);
+            currentStore.setStreaming(nodeId, false);
           },
           onError: (error) => {
             useChatStore.getState().appendToLastMessage(

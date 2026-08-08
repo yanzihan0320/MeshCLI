@@ -5,10 +5,13 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { Check, Copy } from 'lucide-react';
 import type { ChatMessage as ChatMessageType } from '../../types/chat';
+import { useChatStore } from '../../stores/chatStore';
+import { A2UIRenderer } from '../a2ui/A2UIRenderer';
 
 interface ChatMessageProps {
   message: ChatMessageType;
   exploredTexts: string[];
+  nodeId?: string;
 }
 
 function highlightExplored(children: ReactNode, texts: string[]): ReactNode {
@@ -61,12 +64,16 @@ function splitAndHighlight(text: string, texts: string[]): ReactNode {
 export const ChatMessage = memo(function ChatMessage({
   message,
   exploredTexts,
+  nodeId,
 }: ChatMessageProps) {
   const isUser = message.role === 'user';
   const isSystem = message.role === 'system';
   const [copied, setCopied] = useState(false);
   const [lightbox, setLightbox] = useState<string | null>(null);
   const resetTimeoutRef = useRef<number | null>(null);
+  const explanationBlocks = message.blocks?.filter((block) => (
+    block.type === 'mind_map' || block.type === 'comparison_table' || block.type === 'checklist'
+  ));
 
   const handleCopy = useCallback(async () => {
     try {
@@ -262,6 +269,19 @@ export const ChatMessage = memo(function ChatMessage({
           >
             {message.content || '▊'}
           </Markdown>
+        )}
+        {!isUser && explanationBlocks && explanationBlocks.length > 0 && (
+          <div className="not-prose mt-3 space-y-3">
+            {explanationBlocks.map((block) => (
+              <A2UIRenderer
+                key={block.id}
+                block={block}
+                onChange={nodeId
+                  ? (updated) => useChatStore.getState().updateMessageBlock(nodeId, message.id, updated)
+                  : undefined}
+              />
+            ))}
+          </div>
         )}
       </div>
 

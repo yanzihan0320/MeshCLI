@@ -65,11 +65,16 @@ describe('NodeRunClient', () => {
       type: 'patch_applied',
       payload: { changeSetId: 'change-1' },
     };
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify(event), {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(event), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
-    })));
+    }));
+    vi.stubGlobal('fetch', fetchMock);
 
-    await expect(new NodeRunClient().reviewRun('run-1', 'apply')).resolves.toEqual(event);
+    await expect(new NodeRunClient().reviewRun('run-1', 'apply', 'change-1')).resolves.toEqual(event);
+    expect(fetchMock).toHaveBeenCalledWith('/api/runs/run-1/apply', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ changeSetId: 'change-1', actionId: 'review-change-1' }),
+    }));
   });
 });

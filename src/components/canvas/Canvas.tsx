@@ -24,6 +24,7 @@ import { WelcomePopup } from '../ui/WelcomePopup';
 import { calculateMergePosition } from '../../utils/nodeLayout';
 import { getMergeSystemPrompt } from '../../utils/systemPrompts';
 import { streamChat } from '../../services/llm';
+import { deriveExplanationPresentation } from '../../services/explanationBlocks';
 import type { ChatNode } from '../../types/flow';
 
 const nodeTypes: NodeTypes = {
@@ -221,7 +222,7 @@ export function Canvas() {
         const messages = store.getMessages(newNodeId);
 
         store.addMessage(newNodeId, 'user', action);
-        store.addMessage(newNodeId, 'assistant', '');
+        const assistantMessageId = store.addMessage(newNodeId, 'assistant', '');
         store.setStreaming(newNodeId, true);
 
         const controller = new AbortController();
@@ -233,7 +234,12 @@ export function Canvas() {
               useChatStore.getState().appendToLastMessage(newNodeId, token);
             },
             onDone: () => {
-              useChatStore.getState().setStreaming(newNodeId, false);
+              const currentStore = useChatStore.getState();
+              const answer = currentStore.getMessages(newNodeId)
+                .find((message) => message.id === assistantMessageId)?.content ?? '';
+              const presentation = deriveExplanationPresentation(answer, action);
+              currentStore.setMessagePresentation(newNodeId, assistantMessageId, presentation.content, presentation.blocks);
+              currentStore.setStreaming(newNodeId, false);
             },
             onError: (error: Error) => {
               useChatStore.getState().appendToLastMessage(

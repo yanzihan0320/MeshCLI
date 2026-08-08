@@ -67,9 +67,14 @@ export class NodeRunClient {
     if (!response.ok && response.status !== 409) throw new Error(await responseError(response));
   }
 
-  async reviewRun(runId: string, action: 'apply' | 'reject'): Promise<AgentEvent> {
+  async reviewRun(runId: string, action: 'apply' | 'reject', changeSetId: string): Promise<AgentEvent> {
     const response = await fetch(`/api/runs/${encodeURIComponent(runId)}/${action}`, {
       method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        changeSetId,
+        actionId: `review-${changeSetId}`,
+      }),
     });
     const body = await response.json().catch(() => null);
     const parsed = AgentEventSchema.safeParse(body);

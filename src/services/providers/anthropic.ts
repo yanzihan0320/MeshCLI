@@ -1,5 +1,6 @@
 import type { LLMProvider, StreamCallbacks } from './types';
 import type { ChatMessage, LLMConfig } from '../../types/chat';
+import { providerResponseError } from './errors';
 
 function toAnthropicMessages(messages: ChatMessage[]) {
   return messages.map((m) => {
@@ -62,8 +63,7 @@ export const AnthropicProvider: LLMProvider = {
       });
 
       if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`API error ${response.status}: ${errorText}`);
+        throw await providerResponseError(response);
       }
 
       const reader = response.body?.getReader();
@@ -102,7 +102,7 @@ export const AnthropicProvider: LLMProvider = {
               throw new Error(parsed.error?.message ?? 'Unknown stream error');
             }
           } catch (e) {
-            if (e instanceof Error && e.message.startsWith('API error')) throw e;
+            if (e instanceof Error && e.message.startsWith('Model service request failed')) throw e;
 
             if (e instanceof Error && e.message !== 'Unknown stream error' &&
                 !e.message.includes('stream error')) {

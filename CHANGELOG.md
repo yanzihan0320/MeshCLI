@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- A versioned, runtime-validated `A2UIBlock` protocol with controlled mind-map, comparison, checklist, confirmation, diff-review, task-board, process-timeline, and metric-card components
+- Registry-based A2UI rendering in node conversations and agent runs, including safe fallback text for invalid blocks
+- Inline explanation mind maps for five or more parallel chat points and controlled comparison-table rendering
+- Agent plan-to-task-board mapping, execution timelines and metrics, and change-set review panels
+
+### Changed
+
+- Apply and reject requests are now bound to the exact run, change set, and review action and revalidated by the Gateway
+- Change-set schemas now live in the shared protocol package for use by the frontend and Gateway
+- Ordinary chat no longer generates To do / Doing / Done boards; those execution-oriented views are reserved for Agent Mode
+- Model-service failures now expose the useful Gateway/upstream detail instead of a raw `API error 502` body
+- Agent Mode now fills the node content area, accepts bounded text-file attachments, prioritizes visual run status, and preserves a Markdown final response in chat history
+- Agent runs now snapshot uncommitted tracked and untracked files as their baseline, removing the commit-before-every-run requirement while still rejecting source changes made after a run starts
+- Docker startup failures now provide concise recovery guidance instead of exposing a Python stack trace by default
+
 ## [2.0.0] - 2026-05-18
 
 ### Added

@@ -5,6 +5,7 @@ import { streamChat, generateTitle } from '../services/llm';
 import { getRootSystemPrompt, getBranchSystemPrompt, getMergeSystemPrompt } from '../utils/systemPrompts';
 import type { ChatMessage } from '../types/chat';
 import { validateImage, fileToBase64 } from '../utils/image';
+import { deriveExplanationPresentation } from '../services/explanationBlocks';
 
 export function useNodeCopilotChat(
   nodeId: string,
@@ -67,7 +68,7 @@ export function useNodeCopilotChat(
         ...messages,
       ];
 
-      store.addMessage(nodeId, 'assistant', '');
+      const assistantMessageId = store.addMessage(nodeId, 'assistant', '');
       store.setStreaming(nodeId, true);
 
       abortRef.current?.abort();
@@ -81,7 +82,11 @@ export function useNodeCopilotChat(
             useChatStore.getState().appendToLastMessage(nodeId, token);
           },
           onDone: () => {
-            useChatStore.getState().setStreaming(nodeId, false);
+            const currentStore = useChatStore.getState();
+            const answer = currentStore.getMessages(nodeId).find((message) => message.id === assistantMessageId)?.content ?? '';
+            const presentation = deriveExplanationPresentation(answer, topic);
+            currentStore.setMessagePresentation(nodeId, assistantMessageId, presentation.content, presentation.blocks);
+            currentStore.setStreaming(nodeId, false);
             // Auto-generate title for default-named nodes after first exchange
             const currentNode = useFlowStore.getState().nodes.find((n) => n.id === nodeId);
             if (currentNode?.data.topic === 'New Chat') {

@@ -1,5 +1,6 @@
 import type { LLMProvider, StreamCallbacks } from './types';
 import type { ChatMessage, LLMConfig } from '../../types/chat';
+import { providerResponseError } from './errors';
 
 function toOpenAIMessages(messages: ChatMessage[]) {
   return messages.map((m) => {
@@ -52,8 +53,7 @@ export const CustomProvider: LLMProvider = {
       });
 
       if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`API error ${response.status}: ${errorText}`);
+        throw await providerResponseError(response);
       }
 
       const reader = response.body?.getReader();

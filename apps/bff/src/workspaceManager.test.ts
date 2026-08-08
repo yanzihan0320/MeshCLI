@@ -67,7 +67,24 @@ describe('WorkspaceManager', () => {
     await manager.createChangeSet('run-3');
     await writeFile(join(root, 'sample.txt'), 'user\n', 'utf8');
 
-    await expect(manager.apply('run-3')).rejects.toThrow('no longer clean');
+    await expect(manager.apply('run-3')).rejects.toThrow('changed after this Agent run started');
     expect(await readFile(join(root, 'sample.txt'), 'utf8')).toBe('user\n');
+  });
+
+  it('uses uncommitted tracked and untracked files as the isolated run baseline', async () => {
+    const root = await fixtureRepo();
+    await writeFile(join(root, 'sample.txt'), 'user baseline\n', 'utf8');
+    await writeFile(join(root, 'draft.txt'), 'draft baseline\n', 'utf8');
+    const manager = new WorkspaceManager(root);
+    const managed = await manager.prepare('run-dirty');
+
+    expect((await readFile(join(managed.workspacePath, 'sample.txt'), 'utf8')).replaceAll('\r\n', '\n')).toBe('user baseline\n');
+    expect(await readFile(join(managed.workspacePath, 'draft.txt'), 'utf8')).toBe('draft baseline\n');
+    await writeFile(join(managed.workspacePath, 'sample.txt'), 'agent result\n', 'utf8');
+    await manager.createChangeSet('run-dirty');
+    await manager.apply('run-dirty');
+
+    expect(await readFile(join(root, 'sample.txt'), 'utf8')).toBe('agent result\n');
+    expect(await readFile(join(root, 'draft.txt'), 'utf8')).toBe('draft baseline\n');
   });
 });

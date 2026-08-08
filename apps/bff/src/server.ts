@@ -5,7 +5,11 @@ import { streamText } from 'ai';
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createOpenAI } from '@ai-sdk/openai';
 import { publicLLMConfig, resolveLLMConfig } from './llmConfig';
-import { AgentRunRequestSchema, isTerminalAgentEvent } from '../../../packages/protocol/src/agent';
+import {
+  AgentReviewDecisionSchema,
+  AgentRunRequestSchema,
+  isTerminalAgentEvent,
+} from '../../../packages/protocol/src/agent';
 import { AgentRunManager, MockAgentAdapter } from './agentGateway';
 import { OpenHandsAdapter } from './openHandsAdapter';
 
@@ -32,7 +36,15 @@ function providerFromRequest(c: { req: { header: (name: string) => string | unde
 }
 
 function errorMessage(error: unknown) {
-  return error instanceof Error ? error.message : String(error);
+  if (!(error instanceof Error)) return String(error);
+  const cause = error.cause;
+  if (cause instanceof Error && cause.message && cause.message !== error.message) {
+    return `${error.message}: ${cause.message}`;
+  }
+  if (typeof cause === 'object' && cause !== null && 'code' in cause) {
+    return `${error.message} (${String((cause as { code?: unknown }).code)})`;
+  }
+  return error.message;
 }
 
 app.get('/api/llm/config', (c) => {
@@ -292,15 +304,41 @@ app.post('/api/runs/:runId/cancel', async (c) => {
 });
 
 app.post('/api/runs/:runId/apply', async (c) => {
-  if (!agentRuns.get(c.req.param('runId'))) return c.json({ error: 'Run not found' }, 404);
-  const event = await agentRuns.apply(c.req.param('runId'));
+  const runId = c.req.param('runId');
+  const run = agentRuns.get(runId);
+  if (!run) return c.json({ error: 'Run not found' }, 404);
+  const parsedDecision = AgentReviewDecisionSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsedDecision.success) {
+    return c.json({ error: 'A valid review decision is required' }, 400);
+  }
+  const decision = parsedDecision.data;
+  if (decision.changeSetId !== run.changeSet?.changeSetId) {
+    return c.json({ error: 'Review decision is not bound to the active change set' }, 409);
+  }
+  if (decision.actionId !== `review-${decision.changeSetId}`) {
+    return c.json({ error: 'Invalid review action' }, 400);
+  }
+  const event = await agentRuns.apply(runId);
   if (!event) return c.json({ error: 'Run is not ready to apply' }, 409);
   return c.json(event, event.type === 'patch_conflict' ? 409 : 200);
 });
 
 app.post('/api/runs/:runId/reject', async (c) => {
-  if (!agentRuns.get(c.req.param('runId'))) return c.json({ error: 'Run not found' }, 404);
-  const event = await agentRuns.reject(c.req.param('runId'));
+  const runId = c.req.param('runId');
+  const run = agentRuns.get(runId);
+  if (!run) return c.json({ error: 'Run not found' }, 404);
+  const parsedDecision = AgentReviewDecisionSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsedDecision.success) {
+    return c.json({ error: 'A valid review decision is required' }, 400);
+  }
+  const decision = parsedDecision.data;
+  if (decision.changeSetId !== run.changeSet?.changeSetId) {
+    return c.json({ error: 'Review decision is not bound to the active change set' }, 409);
+  }
+  if (decision.actionId !== `review-${decision.changeSetId}`) {
+    return c.json({ error: 'Invalid review action' }, 400);
+  }
+  const event = await agentRuns.reject(runId);
   if (!event) return c.json({ error: 'Run is not ready to reject' }, 409);
   return c.json(event);
 });

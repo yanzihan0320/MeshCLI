@@ -10,6 +10,7 @@ import { nanoid } from 'nanoid';
 import type { ChatNode, ChatNodeData, TopicEdge } from '../types/flow';
 import type { AgentEvent, AgentRunRecord } from '../../packages/protocol/src/agent';
 import { ChangeSetSchema, isTerminalAgentEvent, statusAfterEvent } from '../../packages/protocol/src/agent';
+import { A2UIBlockEventPayloadSchema, type A2UIBlock } from '../../packages/protocol/src/a2ui';
 
 const MAX_RUNS_PER_NODE = 10;
 const MAX_EVENTS_PER_RUN = 1_000;
@@ -136,11 +137,35 @@ export const useFlowStore = create<FlowState>((set, get) => ({
         const parsedChangeSet = event.type === 'change_set_created'
           ? ChangeSetSchema.safeParse(event.payload.changeSet)
           : undefined;
+        const parsedBlock = event.type === 'a2ui_block'
+          ? A2UIBlockEventPayloadSchema.safeParse(event.payload)
+          : undefined;
+        let blocks: A2UIBlock[] = parsedBlock?.success
+          ? [...(run.blocks ?? []).filter((block) => block.id !== parsedBlock.data.block.id), parsedBlock.data.block]
+          : run.blocks ?? [];
+        if (event.type === 'patch_applied' || event.type === 'patch_rejected' || event.type === 'patch_conflict') {
+          blocks = blocks.map((block) => {
+            if (block.type === 'confirmation') {
+              return {
+                ...block,
+                status: event.type === 'patch_applied' ? 'approved' : event.type === 'patch_rejected' ? 'rejected' : 'expired',
+              };
+            }
+            if (block.type === 'diff_review') {
+              return {
+                ...block,
+                status: event.type === 'patch_applied' ? 'applied' : event.type === 'patch_rejected' ? 'rejected' : 'conflicted',
+              };
+            }
+            return block;
+          });
+        }
         const updatedRun: AgentRunRecord = {
           ...run,
           status: statusAfterEvent(event.type),
           finishedAt: isTerminalAgentEvent(event.type) ? event.timestamp : run.finishedAt,
           changeSet: parsedChangeSet?.success ? parsedChangeSet.data : run.changeSet,
+          blocks,
           events: [...run.events, event]
             .sort((a, b) => a.sequence - b.sequence)
             .slice(-MAX_EVENTS_PER_RUN),

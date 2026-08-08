@@ -3,16 +3,18 @@ import { useTranslation } from 'react-i18next';
 import { Bot, Check, ChevronDown, MessageCircle, Paperclip, Play, Send, Square, X } from 'lucide-react';
 import { useChatStore } from '../../stores/chatStore';
 
-type InputMode = 'chat' | 'agent';
+export type InputMode = 'chat' | 'agent';
 
 interface ChatInputProps {
   nodeId: string;
   onSend: (message: string, images: File[]) => void;
   onCancel: () => void;
-  onRunAgent: (prompt: string) => void;
+  onRunAgent: (prompt: string, files?: File[]) => void;
   onCancelAgent: () => void;
   isAgentRunning: boolean;
   supportsVision?: boolean;
+  mode: InputMode;
+  onModeChange: (mode: InputMode) => void;
 }
 
 export function ChatInput({
@@ -23,12 +25,13 @@ export function ChatInput({
   onCancelAgent,
   isAgentRunning,
   supportsVision = true,
+  mode,
+  onModeChange,
 }: ChatInputProps) {
   const { t } = useTranslation();
   const [input, setInput] = useState('');
   const [images, setImages] = useState<File[]>([]);
   const [isDragging, setIsDragging] = useState(false);
-  const [mode, setMode] = useState<InputMode>('chat');
   const [modeMenuOpen, setModeMenuOpen] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -44,8 +47,9 @@ export function ChatInput({
 
     if (mode === 'agent') {
       if (!trimmed) return;
-      onRunAgent(trimmed);
+      onRunAgent(trimmed, images);
       setInput('');
+      setImages([]);
       return;
     }
 
@@ -57,9 +61,9 @@ export function ChatInput({
   }, [input, images, isBusy, mode, onRunAgent, onSend]);
 
   const selectMode = (nextMode: InputMode) => {
-    setMode(nextMode);
+    onModeChange(nextMode);
     setModeMenuOpen(false);
-    if (nextMode === 'agent') setImages([]);
+    setImages([]);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -72,9 +76,9 @@ export function ChatInput({
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files) return;
 
-    const files = Array.from(e.target.files).filter((f) =>
-      f.type.startsWith('image/')
-    );
+    const files = Array.from(e.target.files).filter((f) => (
+      mode === 'agent' || f.type.startsWith('image/')
+    ));
 
     setImages((prev) => [...prev, ...files]);
   };
@@ -82,11 +86,9 @@ export function ChatInput({
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
-    if (mode === 'agent') return;
-
-    const files = Array.from(e.dataTransfer.files).filter((f) =>
-      f.type.startsWith('image/')
-    );
+    const files = Array.from(e.dataTransfer.files).filter((f) => (
+      mode === 'agent' || f.type.startsWith('image/')
+    ));
 
     setImages((prev) => [...prev, ...files]);
   };
@@ -142,6 +144,16 @@ export function ChatInput({
           ))}
         </div>
       )}
+      {mode === 'agent' && images.length > 0 && (
+        <div className="mb-2 flex flex-wrap gap-1.5">
+          {images.map((file, index) => (
+            <span key={`${file.name}-${index}`} className="flex items-center gap-1 rounded-md border border-border bg-surface-800 px-2 py-1 text-[10px] text-text-secondary">
+              <Paperclip size={10} /> {file.name}
+              <button type="button" onClick={() => removeImage(index)} aria-label={`Remove ${file.name}`}><X size={10} /></button>
+            </span>
+          ))}
+        </div>
+      )}
 
       <div className="flex items-end gap-1.5">
         
@@ -166,7 +178,7 @@ export function ChatInput({
         <input
           ref={fileInputRef}
           type="file"
-          accept="image/*"
+          accept={mode === 'agent' ? '.txt,.md,.mdx,.json,.yaml,.yml,.toml,.csv,.ts,.tsx,.js,.jsx,.py,.java,.go,.rs,.css,.html,.xml,.sql,.sh,.ps1' : 'image/*'}
           multiple
           hidden
           onChange={handleFileSelect}
@@ -220,12 +232,12 @@ export function ChatInput({
 
         <button
           onClick={() => fileInputRef.current?.click()}
-          disabled={!supportsVision || mode === 'agent'}
+          disabled={mode === 'chat' && !supportsVision}
           className="shrink-0 p-2 rounded-lg bg-surface-800 text-text-secondary hover:bg-surface-700 transition disabled:opacity-30"
           title={
-            supportsVision
-              ? t('chat.attachImage')
-              : t('chat.imagesNotSupported')
+            mode === 'agent'
+              ? t('agentRun.attachFiles')
+              : supportsVision ? t('chat.attachImage') : t('chat.imagesNotSupported')
           }
         >
           <Paperclip size={16} />

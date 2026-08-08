@@ -66,7 +66,7 @@ export function ChatMessageList({ nodeId, onExplore }: ChatMessageListProps) {
         ) : (
           <div className="py-2 space-y-1">
             {messages.map((msg) => (
-              <ChatMessage key={msg.id} message={msg} exploredTexts={exploredTexts} />
+              <ChatMessage key={msg.id} nodeId={nodeId} message={msg} exploredTexts={exploredTexts} />
             ))}
           </div>
         )}

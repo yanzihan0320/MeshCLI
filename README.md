@@ -21,7 +21,7 @@ MeshCLI is under active development. The repository contains a working CaudalFlo
 | Agent Gateway and normalized events | Available | Versioned node-run contract, OpenHands adapter, cancellation, and replayable SSE stream |
 | AG-UI-compatible run viewer | Available | Chat/Agent modes, command and file events, Changed Files, unified diff, Apply All, and Reject All |
 | Executable agent adapter | Available | OpenHands SDK + DockerWorkspace; the adapter contract remains vendor-neutral |
-| A2UI-style interactive blocks | Planned | Checklist, confirmation, diff review, form, task board, comparison |
+| A2UI-style interactive blocks | Available (core set) | Chat explanations: mind map and comparison; Agent runs: task board, process timeline, metrics, confirmation, and diff review |
 | MCP tools and permission manager | Planned | Filesystem, GitHub, and browser/search integrations first |
 | Audit log, checkpoints, rollback | Planned | Required before broad autonomous execution |
 
@@ -36,7 +36,7 @@ MeshCLI treats a conversation as a graph:
 3. Continue the discussion inside that node with inherited and local context.
 4. Run an agent from the node when the idea is ready to become work.
 5. Review streamed activity, commands, proposed file changes, and permission requests.
-6. Merge related nodes into a decision, implementation plan, or task board.
+6. Merge related nodes into a clearer explanation, decision, comparison, or structured mind map.
 
 The graph is not decoration. It is the durable structure for context, decisions, execution, and results.
 
@@ -50,7 +50,7 @@ The graph is not decoration. It is the durable structure for context, decisions,
 - Multi-node merge with summaries and next actions
 - Running an agent from a node against a selected workspace
 - Streaming run events to the node UI
-- Interactive checklist, confirmation, diff, form, task-board, and comparison blocks
+- Controlled mind-map, comparison, checklist, confirmation, diff, task-board, process-timeline, and metric-card blocks
 - Filesystem, GitHub, and browser/search tools through MCP-compatible connectors
 - Workspace sandboxing, scoped file access, permission prompts, audit records, and cancellation
 - An adapter boundary so MeshCLI is not coupled to one model or agent runtime
@@ -88,7 +88,7 @@ Plain text appears as chat, command output as a collapsible log, file changes as
 
 ### Merge
 
-Merging nodes collects their selected source text, summaries, local messages, and run results. The new node should produce a synthesis, decision summary, unresolved conflicts, and next actions. When useful, it may render those actions as an interactive task board.
+Merging nodes collects their selected source text, summaries, local messages, and run results. The new node should produce a synthesis, decision summary, unresolved conflicts, and next actions. Ordinary chat remains explanation-oriented: a real comparison can render as a table, while five or more parallel ideas can render as an inline mind map. Execution task boards belong to Agent Mode.
 
 ## Target architecture
 
@@ -148,12 +148,14 @@ type A2UIBlock =
   | { type: "checklist"; title: string; items: ChecklistItem[] }
   | { type: "diff_review"; files: DiffFile[] }
   | { type: "confirmation"; title: string; description: string; actions: Action[] }
-  | { type: "form"; title: string; fields: FormField[] }
   | { type: "task_board"; columns: TaskColumn[] }
-  | { type: "comparison_table"; columns: string[]; rows: string[][] };
+  | { type: "mind_map"; root: MindMapNode }
+  | { type: "comparison_table"; columns: string[]; rows: ComparisonRow[] }
+  | { type: "process_timeline"; steps: ProcessStep[] }
+  | { type: "metric_cards"; metrics: Metric[] };
 ```
 
-The run and event contracts live in `packages/protocol`; future A2UI contracts should join them so the UI, gateway, adapters, and tests do not invent incompatible shapes.
+The run, event, change-set, and A2UI contracts live in `packages/protocol`, so the UI, gateway, adapters, and tests share the same runtime-validated shapes. Rendering is registry-based and controlled: agents select from approved block types and data fields, but cannot generate or execute arbitrary React code.
 
 ## Safety model
 
@@ -190,17 +192,17 @@ Define versioned run/event schemas, create the Agent Gateway, stream events with
 
 **Status: complete for the OpenHands DockerWorkspace MVP.**
 
-The OpenHands adapter maps messages, plans, commands, observations, and file changes into MeshCLI events. Every run clones a clean Git project into a managed copy, mounts only that copy into Docker, creates a binary-safe patch, and waits for Apply All or Reject All before the Gateway can touch the real project.
+The OpenHands adapter maps messages, plans, commands, observations, and file changes into MeshCLI events. Every run snapshots the current Git working tree—including tracked and untracked user changes—into a managed copy, so users do not need to commit before each run. Docker mode mounts only that copy, creates a binary-safe Agent-only patch, and waits for Apply All or Reject All before the Gateway can touch the real project. Agent Mode uses the full node content area, accepts bounded text-file references, and preserves the Agent's final narrative response in chat history.
 
 **Done when:** a node can analyze a real repository and propose a change without silently applying protected operations.
 
 ### Phase 4 — Interactive result renderer
 
-**Status: partial. Changed Files and whole-change-set review are available.**
+**Status: complete for the initial controlled-rendering milestone.**
 
-Implement confirmation, diff review, checklist, form, task board, and comparison blocks with schema validation and accessible fallback text.
+The shared, versioned `A2UIBlock` union separates explanation UI from execution UI. Ordinary chat can replace a Markdown comparison table with a controlled comparison block and can replace an unordered list with an inline mind map only when it contains at least five parallel ideas. Agent plans map to To do / Doing / Done boards; runs also show a process timeline and metrics, while proposed change sets emit a bound diff and confirmation panel before any protected write. Invalid or unsupported blocks render accessible fallback text.
 
-**Done when:** protected actions can pause for confirmation and merge results can render as a task board.
+**Done when:** ordinary explanations can become clearer without turning every answer into a visualization, while Agent Mode makes plans, execution, review, and protected actions visible. **Done for the current block set.**
 
 ### Phase 5 — MCP tools and hardening
 
@@ -217,7 +219,7 @@ Add filesystem, GitHub, and browser/search connectors behind the same permission
 5. A proposed command or edit pauses and displays a confirmation panel and diff.
 6. The user creates another node for “improve the Agent Gateway.”
 7. They merge both nodes into “final refactoring plan.”
-8. MeshCLI renders the synthesis as a task board with decisions, dependencies, and next actions.
+8. The ordinary merged explanation uses a comparison or mind map when structurally useful; an Agent run renders its executable plan as a task board.
 
 ## Current repository layout
 

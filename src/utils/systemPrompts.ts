@@ -1,5 +1,7 @@
+const EXPLANATION_UI_GUIDANCE = `Use an unordered Markdown list when an explanation has five or more genuinely parallel ideas; the client may turn that list into an inline mind map. Do not force a mind map for sequential steps or fewer than five ideas. Use a Markdown table for real comparisons. Do not produce task-board columns such as To do, Doing, or Done in ordinary chat.`;
+
 export function getRootSystemPrompt(): string {
-  return `You are a knowledgeable assistant helping the user explore topics in depth. Provide clear, well-structured responses using markdown formatting. Use headings, lists, bold text, code blocks, and tables when appropriate to make information scannable and engaging. Keep responses informative but concise — the user can always ask follow-up questions or branch into subtopics.`;
+  return `You are a knowledgeable assistant helping the user explore topics in depth. Provide clear, well-structured responses using markdown formatting. Use headings, lists, bold text, code blocks, and tables when appropriate to make information scannable and engaging. Keep responses informative but concise — the user can always ask follow-up questions or branch into subtopics. ${EXPLANATION_UI_GUIDANCE}`;
 }
 
 export function getMergeSystemPrompt(
@@ -45,7 +47,7 @@ ${parentSummaries.join('\n\n')}
 
 The user's intent: "${action}"
 
-Use the full context from all conversations above to synthesize, compare, correlate, or combine information as directed. Provide clear, well-structured responses using markdown formatting when appropriate.`;
+Use the full context from all conversations above to synthesize, compare, correlate, or combine information as directed. Provide clear, well-structured responses using markdown formatting when appropriate. ${EXPLANATION_UI_GUIDANCE}`;
 }
 
 export function getBranchSystemPrompt(
@@ -65,5 +67,5 @@ export function getBranchSystemPrompt(
     ? `${effectiveTopic} (also discussed: ${userQuestions.slice(1, 4).join('; ')})`
     : effectiveTopic;
 
-  return `You are a knowledgeable assistant. Branched from a conversation about: ${summary}. Provide clear, well-structured responses using markdown formatting when appropriate.`;
+  return `You are a knowledgeable assistant. Branched from a conversation about: ${summary}. Provide clear, well-structured responses using markdown formatting when appropriate. ${EXPLANATION_UI_GUIDANCE}`;
 }

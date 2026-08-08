@@ -1,4 +1,12 @@
 import { z } from 'zod';
+import { A2UIBlockEventPayloadSchema, type A2UIBlock } from './a2ui';
+export {
+  ChangedFileSchema,
+  ChangeSetSchema,
+  type ChangedFile,
+  type ChangeSet,
+} from './changes';
+import type { ChangeSet } from './changes';
 
 export const AGENT_EVENT_TYPES = [
   'run_started',
@@ -17,6 +25,7 @@ export const AGENT_EVENT_TYPES = [
   'patch_applied',
   'patch_rejected',
   'patch_conflict',
+  'a2ui_block',
   'run_finished',
   'run_failed',
   'run_cancelled',
@@ -34,6 +43,16 @@ export const AgentEventSchema = z.object({
   timestamp: z.number().int().nonnegative(),
   type: AgentEventTypeSchema,
   payload: z.record(z.string(), z.unknown()),
+}).superRefine((event, context) => {
+  if (event.type !== 'a2ui_block') return;
+  const parsed = A2UIBlockEventPayloadSchema.safeParse(event.payload);
+  if (!parsed.success) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'a2ui_block events must contain a valid A2UIBlock payload',
+      path: ['payload', 'block'],
+    });
+  }
 });
 
 export type AgentEvent = z.infer<typeof AgentEventSchema>;
@@ -49,6 +68,11 @@ export const AgentRunRequestSchema = z.object({
       role: z.enum(['user', 'assistant', 'system']),
       content: z.string().max(50_000),
     })).max(200).default([]),
+    attachments: z.array(z.object({
+      name: z.string().min(1).max(260),
+      content: z.string().max(250_000),
+      mediaType: z.string().max(200).optional(),
+    })).max(10).optional(),
   }),
 });
 
@@ -62,26 +86,12 @@ export const AgentRunCreatedSchema = z.object({
 
 export type AgentRunCreated = z.infer<typeof AgentRunCreatedSchema>;
 
-export const ChangedFileSchema = z.object({
-  path: z.string().min(1),
-  status: z.enum(['added', 'modified', 'deleted', 'renamed', 'binary']),
-  additions: z.number().int().nonnegative().nullable(),
-  deletions: z.number().int().nonnegative().nullable(),
-});
-
-export type ChangedFile = z.infer<typeof ChangedFileSchema>;
-
-export const ChangeSetSchema = z.object({
+export const AgentReviewDecisionSchema = z.object({
   changeSetId: z.string().min(1),
-  runId: z.string().min(1),
-  baseCommit: z.string().regex(/^[0-9a-f]{40}$/i),
-  files: z.array(ChangedFileSchema),
-  diff: z.string(),
-  truncated: z.boolean().default(false),
-  createdAt: z.number().int().nonnegative(),
+  actionId: z.string().min(1),
 });
 
-export type ChangeSet = z.infer<typeof ChangeSetSchema>;
+export type AgentReviewDecision = z.infer<typeof AgentReviewDecisionSchema>;
 
 export type AgentRunStatus =
   | 'queued'
@@ -103,6 +113,7 @@ export interface AgentRunRecord {
   finishedAt?: number;
   events: AgentEvent[];
   changeSet?: ChangeSet;
+  blocks?: A2UIBlock[];
 }
 
 export function statusAfterEvent(type: AgentEventType): AgentRunStatus {

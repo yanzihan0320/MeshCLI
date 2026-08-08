@@ -12,10 +12,11 @@ import { calculateBranchPosition } from '../../utils/nodeLayout';
 import { getBranchSystemPrompt } from '../../utils/systemPrompts';
 import { ChatNodeHeader } from './ChatNodeHeader';
 import { ChatMessageList } from './ChatMessageList';
-import { ChatInput } from './ChatInput';
+import { ChatInput, type InputMode } from './ChatInput';
 import { ChatNodeDeleteConfirmation } from './ChatNodeDeleteConfirmation';
 import { AgentRunPanel } from './AgentRunPanel';
 import { useNodeAgentRun } from '../../hooks/useNodeAgentRun';
+import { deriveExplanationPresentation } from '../../services/explanationBlocks';
 
 const PALETTE_COLORS = [
   '#22c55e',
@@ -31,6 +32,7 @@ export function ChatNodeComponent({ id, data, selected }: NodeProps<ChatNode>) {
   const { topic, collapsed, minimized, maximized, parentNodeId, branchText, parentNodeIds, mergeAction, color, label } = data;
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
   const [isPanning, setIsPanning] = useState(false);
+  const [inputMode, setInputMode] = useState<InputMode>('chat');
   const { sendMessage, cancelStream } = useNodeCopilotChat(id, topic, parentNodeId, branchText, parentNodeIds as string[] | undefined, mergeAction as string | undefined);
   const agentRun = useNodeAgentRun(id, topic);
   const { getViewport, setViewport } = useReactFlow();
@@ -334,7 +336,7 @@ export function ChatNodeComponent({ id, data, selected }: NodeProps<ChatNode>) {
         const messages = store.getMessages(newNodeId);
 
         store.addMessage(newNodeId, "user", firstMessage);
-        store.addMessage(newNodeId, "assistant", "");
+        const assistantMessageId = store.addMessage(newNodeId, "assistant", "");
         store.setStreaming(newNodeId, true);
 
         const controller = new AbortController();
@@ -354,7 +356,11 @@ export function ChatNodeComponent({ id, data, selected }: NodeProps<ChatNode>) {
               useChatStore.getState().appendToLastMessage(newNodeId, token);
             },
             onDone: () => {
-              useChatStore.getState().setStreaming(newNodeId, false);
+              const currentStore = useChatStore.getState();
+              const answer = currentStore.getMessages(newNodeId).find((message) => message.id === assistantMessageId)?.content ?? '';
+              const presentation = deriveExplanationPresentation(answer, selectedText);
+              currentStore.setMessagePresentation(newNodeId, assistantMessageId, presentation.content, presentation.blocks);
+              currentStore.setStreaming(newNodeId, false);
             },
             onError: (error: Error) => {
               useChatStore
@@ -614,8 +620,9 @@ export function ChatNodeComponent({ id, data, selected }: NodeProps<ChatNode>) {
         onCancel={agentRun.cancelRun}
         onApply={agentRun.applyRun}
         onReject={agentRun.rejectRun}
+        fullHeight={inputMode === 'agent'}
       />
-      <ChatMessageList nodeId={id} onExplore={handleExplore} />
+      {inputMode === 'chat' && <ChatMessageList nodeId={id} onExplore={handleExplore} />}
       <ChatInput
         nodeId={id}
         onSend={sendMessage}
@@ -623,6 +630,8 @@ export function ChatNodeComponent({ id, data, selected }: NodeProps<ChatNode>) {
         onRunAgent={agentRun.startRun}
         onCancelAgent={agentRun.cancelRun}
         isAgentRunning={agentRun.isRunning}
+        mode={inputMode}
+        onModeChange={setInputMode}
       />
     </div>
   );
