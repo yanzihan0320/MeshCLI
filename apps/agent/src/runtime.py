@@ -1,119 +1,86 @@
-"""Runtime factory for the CaudalFlow Copilot LangGraph agent."""
+"""Runtime factory for the MeshCLI workspace assistant graph."""
 
 from __future__ import annotations
 
+import json
 import os
+from typing import Any
 
-from langgraph.graph.state import CompiledStateGraph
+from langgraph.graph.message import add_messages
+from typing_extensions import Annotated, TypedDict
+
+
+class AssistantState(TypedDict, total=False):
+    messages: Annotated[list, add_messages]
+    workspace_id: str
+    workspace_root: str
+    canvas: dict[str, Any]
+    activated_skills: list[dict[str, Any]]
+    prepared_context: str
 
 
 NOOP_FALLBACK_MESSAGE = (
-    "Set ANTHROPIC_API_KEY, GEMINI_API_KEY, or OPENAI_API_KEY in apps/agent/.env to enable the CaudalFlow Copilot agent. "
-    "The frontend and runtime wiring are installed."
+    "Set ANTHROPIC_API_KEY, GEMINI_API_KEY, or OPENAI_API_KEY in apps/agent/.env "
+    "to enable the MeshCLI workspace assistant."
 )
 
 
-def build_graph(
-    runtime: str,
-    *,
-    tools: list,
-    system_prompt: str,
-) -> CompiledStateGraph:
-    if runtime == "noop":
-        return _build_noop(NOOP_FALLBACK_MESSAGE)
-    return _build_react(tools, system_prompt)
-
-
-from langgraph.graph.message import add_messages as _add_messages
-from typing_extensions import Annotated as _Annotated, TypedDict as _TypedDict
-
-
-class _NoopState(_TypedDict):
-    messages: _Annotated[list, _add_messages]
-
-
-def _build_noop(message: str) -> CompiledStateGraph:
-    from langchain_core.messages import AIMessage
-    from langgraph.graph import END, START, StateGraph
-
-    def _respond(_state: _NoopState) -> dict:
-        return {"messages": [AIMessage(content=message, id="noop-fallback")]}
-
-    graph = StateGraph(_NoopState)
-    graph.add_node("respond", _respond)
-    graph.add_edge(START, "respond")
-    graph.add_edge("respond", END)
-    return graph.compile()
-
-
-def merge_system_messages(messages: list) -> list:
-    """Consolidate all system messages into one at the front.
-
-    CopilotKit injects extra system messages that get interleaved
-    with user/assistant turns. The Anthropic API rejects
-    non-consecutive system messages, so we pull them all out and
-    merge them into a single leading SystemMessage.
-    """
-    from langchain_core.messages import SystemMessage
-
-    system_parts: list[str] = []
-    other: list = []
-    for msg in messages:
-        if isinstance(msg, SystemMessage):
-            text = msg.content if isinstance(msg.content, str) else str(msg.content)
-            if text:
-                system_parts.append(text)
-        else:
-            other.append(msg)
-    if system_parts:
-        return [SystemMessage(content="\n\n".join(system_parts))] + other
-    return other
-
-
 def _get_llm():
-    openai_key = os.getenv("OPENAI_API_KEY")
-    if openai_key:
+    if os.getenv("OPENAI_API_KEY"):
         from langchain_openai import ChatOpenAI
-
-        return ChatOpenAI(
-            model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
-            temperature=float(os.getenv("AGENT_TEMPERATURE", "0")),
-        )
-
-    anthropic_key = os.getenv("ANTHROPIC_API_KEY")
-    if anthropic_key:
+        return ChatOpenAI(model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"), temperature=0)
+    if os.getenv("ANTHROPIC_API_KEY"):
         from langchain_anthropic import ChatAnthropic
-
-        class _SystemMergingAnthropic(ChatAnthropic):
-            """ChatAnthropic subclass that merges scattered system messages."""
-
-            def _get_request_payload(self, messages: list, **kwargs) -> dict:
-                return super()._get_request_payload(
-                    merge_system_messages(messages), **kwargs
-                )
-
-        return _SystemMergingAnthropic(
-            model=os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-20250514"),
-            temperature=float(os.getenv("AGENT_TEMPERATURE", "0")),
-        )
-
+        return ChatAnthropic(model=os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-20250514"), temperature=0)
     from langchain_google_genai import ChatGoogleGenerativeAI
-
-    api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or "stub"
     return ChatGoogleGenerativeAI(
         model=os.getenv("GEMINI_MODEL", "gemini-2.0-flash"),
-        temperature=float(os.getenv("AGENT_TEMPERATURE", "0")),
-        api_key=api_key,
+        temperature=0,
+        api_key=os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or "stub",
     )
 
 
-def _build_react(tools: list, system_prompt: str) -> CompiledStateGraph:
-    from copilotkit import CopilotKitMiddleware
-    from langchain.agents import create_agent
+def build_graph(runtime: str, *, tools: list, system_prompt: str):
+    from langchain_core.messages import AIMessage, SystemMessage
+    from langgraph.graph import END, START, StateGraph
+    from langgraph.prebuilt import ToolNode, tools_condition
+    from langgraph.config import get_stream_writer
 
-    return create_agent(
-        model=_get_llm(),
-        tools=tools,
-        system_prompt=system_prompt,
-        middleware=[CopilotKitMiddleware()],
-    )
+    all_tools = tools
+
+    def prepare_context(state: AssistantState) -> dict[str, Any]:
+        skills = state.get("activated_skills", [])
+        writer = get_stream_writer()
+        for skill in skills:
+            writer({"type": "skill_activated", "payload": {"name": skill.get("name"), "source": skill.get("source")}})
+        skill_text = "\n\n".join(skill.get("content", "") for skill in skills)
+        canvas = json.dumps(state.get("canvas", {}), ensure_ascii=False)
+        return {"prepared_context": f"CURRENT CANVAS SNAPSHOT:\n{canvas}\n\nACTIVATED SKILLS:\n{skill_text}"}
+
+    if runtime == "noop":
+        def respond(_state: AssistantState) -> dict[str, Any]:
+            return {"messages": [AIMessage(content=NOOP_FALLBACK_MESSAGE)]}
+        graph = StateGraph(AssistantState)
+        graph.add_node("prepare_context", prepare_context)
+        graph.add_node("agent", respond)
+        graph.add_edge(START, "prepare_context")
+        graph.add_edge("prepare_context", "agent")
+        graph.add_edge("agent", END)
+        return graph.compile()
+
+    model = _get_llm().bind_tools(all_tools)
+
+    def call_agent(state: AssistantState) -> dict[str, Any]:
+        system = SystemMessage(content=f"{system_prompt}\n\n{state.get('prepared_context', '')}")
+        response = model.invoke([system, *state.get("messages", [])])
+        return {"messages": [response]}
+
+    graph = StateGraph(AssistantState)
+    graph.add_node("prepare_context", prepare_context)
+    graph.add_node("agent", call_agent)
+    graph.add_node("tools", ToolNode(all_tools))
+    graph.add_edge(START, "prepare_context")
+    graph.add_edge("prepare_context", "agent")
+    graph.add_conditional_edges("agent", tools_condition, {"tools": "tools", "__end__": END})
+    graph.add_edge("tools", "agent")
+    return graph.compile()

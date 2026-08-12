@@ -1,34 +1,18 @@
-# CaudalFlow Copilot Agent
+# MeshCLI LangGraph assistant
 
-Local LangGraph agent used by the Vite app through the CopilotKit BFF.
-This app lives under `apps/agent` to mirror the starter-kit architecture.
+This service orchestrates the right-side MeshCLI assistant. It owns workspace-scoped conversation memory, Skill context, canvas tool selection, and interrupt/resume. It does not mutate browser canvas state directly and does not replace the OpenHands adapter used by node Agent Mode.
 
-Run from the repository root:
-
-```bash
-npm run install:agent
-npm run dev:copilot
-```
-
-This project uses a local Python virtual environment instead of `uv`.
-`npm run install:agent` creates `apps/agent/.venv` and installs the package in editable mode.
-`npm run dev:agent` prefers that venv, then falls back to the previous
-`agent/.venv` if it still exists locally.
-
-If you already installed `langgraph` globally or started the agent another way, you can use:
+From the repository root:
 
 ```bash
-npm run dev:agent:global
+npm run install:agent       # macOS/Linux
+npm run install:agent:win   # Windows
+npm run dev:agent           # macOS/Linux
+npm run dev:agent:win       # Windows
 ```
 
-Create `apps/agent/.env` with:
+The browser calls only the BFF on port 4000. The BFF validates Workspace Binding and proxies to the local LangGraph Agent Server on port 8133. Copy `.env.example` to `.env` and configure a model key.
 
-```bash
-OPENAI_API_KEY=...
-```
+The Phase 5B filesystem MCP uses `langchain-mcp-adapters` and the official `@modelcontextprotocol/server-filesystem` package. Its root is supplied only by the BFF from the bound Git repository. The allowlist exposes read/search/tree/metadata tools; repository write, move, and delete tools are filtered out.
 
-During the transition from the previous root-level layout, `agent/.env` is also
-loaded as a fallback if it exists.
-
-Without a model API key, the graph boots in a noop fallback mode so the frontend
-and runtime wiring can still be verified.
+Without a model API key, the graph boots in noop mode so service wiring can still be checked. A pending confirmation is not yet restart-safe; reissue it after a local Agent Server restart.

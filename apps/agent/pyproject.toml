@@ -1,7 +1,7 @@
 [project]
-name = "caudalflow-agent"
+name = "meshcli-agent"
 version = "2.0.0"
-description = "CopilotKit + AG-UI LangGraph agent for CaudalFlow."
+description = "LangGraph canvas assistant, Skills, and MCP orchestration for MeshCLI."
 requires-python = ">=3.11"
 dependencies = [
     "copilotkit>=0.1.0",
@@ -13,12 +13,13 @@ dependencies = [
     "langchain-google-genai>=2.0.0",
     "langgraph>=0.2.0",
     "langgraph-cli[inmem]>=0.2.0",
+    "langchain-mcp-adapters>=0.1.0",
     "python-dotenv>=1.0.0",
     "typing-extensions>=4.10.0",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0"]
+dev = ["pytest>=8.0,<9"]
 
 [build-system]
 requires = ["hatchling"]

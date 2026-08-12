@@ -25,6 +25,9 @@ export const AGENT_EVENT_TYPES = [
   'patch_applied',
   'patch_rejected',
   'patch_conflict',
+  'change_set_rebased',
+  'patch_reverted',
+  'undo_conflict',
   'a2ui_block',
   'run_finished',
   'run_failed',
@@ -61,6 +64,8 @@ export const AgentRunRequestSchema = z.object({
   nodeId: z.string().min(1),
   workspaceId: z.string().min(1),
   prompt: z.string().trim().min(1).max(50_000),
+  workingDirectory: z.string().max(1_000).optional(),
+  agentModelId: z.string().max(300).optional(),
   context: z.object({
     topic: z.string().max(10_000),
     sourceText: z.string().max(50_000).optional(),
@@ -73,6 +78,11 @@ export const AgentRunRequestSchema = z.object({
       content: z.string().max(250_000),
       mediaType: z.string().max(200).optional(),
     })).max(10).optional(),
+    references: z.array(z.object({
+      nodeId: z.string().min(1),
+      title: z.string().max(1_000),
+      content: z.string().max(50_000),
+    })).max(20).optional(),
   }),
 });
 
@@ -102,6 +112,7 @@ export type AgentRunStatus =
   | 'applied'
   | 'rejected'
   | 'conflicted'
+  | 'reverted'
   | 'finished'
   | 'failed'
   | 'cancelled';
@@ -121,6 +132,9 @@ export function statusAfterEvent(type: AgentEventType): AgentRunStatus {
   if (type === 'patch_applied') return 'applied';
   if (type === 'patch_rejected') return 'rejected';
   if (type === 'patch_conflict') return 'conflicted';
+  if (type === 'patch_reverted') return 'reverted';
+  if (type === 'undo_conflict') return 'applied';
+  if (type === 'change_set_rebased') return 'running';
   if (type === 'run_finished') return 'running';
   if (type === 'run_failed') return 'failed';
   if (type === 'run_cancelled') return 'cancelled';
@@ -132,6 +146,8 @@ export function isTerminalAgentEvent(type: AgentEventType): boolean {
     || type === 'patch_applied'
     || type === 'patch_rejected'
     || type === 'patch_conflict'
+    || type === 'patch_reverted'
+    || type === 'undo_conflict'
     || type === 'run_failed'
     || type === 'run_cancelled';
 }

@@ -31,7 +31,11 @@ container.
 The frontend proxies `/api/llm` to this service during local development.
 
 - `POST /api/llm` streams a model response.
-- `POST /api/agent` streams canvas-aware assistant events with the selected provider.
+- `POST /api/assistant/turns` validates the Workspace/Canvas snapshot and proxies a LangGraph turn over SSE.
+- `POST /api/assistant/actions/:actionId/resolve` resumes an interrupted canvas action with the real frontend result.
+- `GET /api/assistant/skills?workspaceId=...` lists the merged Skill catalog without exposing local paths.
+- `GET /api/assistant/mcp/status` reports the server-side MCP registry without commands, roots, or secrets.
+- `POST /api/agent` is retired and returns `410 Gone`.
 - `POST /api/node-runs` creates a node-bound OpenHands execution run.
 - `GET /api/runs/:runId/events` replays and streams normalized run events over SSE.
 - `POST /api/runs/:runId/cancel` cancels an active run.

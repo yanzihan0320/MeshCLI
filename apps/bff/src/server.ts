@@ -1,9 +1,6 @@
 import { Hono } from 'hono';
 import { serve } from '@hono/node-server';
 import { cors } from 'hono/cors';
-import { streamText } from 'ai';
-import { createAnthropic } from '@ai-sdk/anthropic';
-import { createOpenAI } from '@ai-sdk/openai';
 import { publicLLMConfig, resolveLLMConfig } from './llmConfig';
 import {
   AgentReviewDecisionSchema,
@@ -12,6 +9,10 @@ import {
 } from '../../../packages/protocol/src/agent';
 import { AgentRunManager, MockAgentAdapter } from './agentGateway';
 import { OpenHandsAdapter } from './openHandsAdapter';
+import { workspaceBindingRegistry } from './workspaceBindingRegistry';
+import { AssistantActionResolveSchema, AssistantTurnRequestSchema } from '../../../packages/protocol/src/assistant';
+import { assistantGateway } from './assistantGateway';
+import { skillRegistry } from './skillRegistry';
 
 const app = new Hono();
 const configuredAdapter = (process.env.AGENT_ADAPTER ?? 'openhands') === 'mock'
@@ -30,6 +31,18 @@ app.use(
 
 const MAX_LLM_BODY_BYTES = 10 * 1024 * 1024;
 const UPSTREAM_TIMEOUT_MS = 180_000;
+
+function agentModelConfig() {
+  const config = resolveLLMConfig('openai');
+  const configuredDefault = config?.model?.trim();
+  const explicit = (process.env.AGENT_ALLOWED_MODELS ?? '')
+    .split(',')
+    .map((model) => model.trim())
+    .filter(Boolean);
+  const allowed = new Set(explicit.length ? explicit : configuredDefault ? [configuredDefault] : []);
+  if (configuredDefault) allowed.add(configuredDefault);
+  return { config, configuredDefault, allowed };
+}
 
 function providerFromRequest(c: { req: { header: (name: string) => string | undefined; query: (name: string) => string | undefined } }) {
   return c.req.header('x-llm-provider') || c.req.query('provider');
@@ -75,6 +88,63 @@ app.get('/api/llm/models', async (c) => {
     return c.json(data);
   } catch (error) {
     return c.json({ error: `Unable to fetch models: ${errorMessage(error)}` }, 502);
+  }
+});
+
+app.get('/api/agent/models', async (c) => {
+  const { config, configuredDefault, allowed } = agentModelConfig();
+  if (!config || !configuredDefault || !config.apiKey) {
+    return c.json({ error: 'The Agent model is not configured.' }, 502);
+  }
+
+  let upstreamIds: string[] = [];
+  let warning: string | undefined;
+  if (process.env.AGENT_ALLOWED_MODELS?.trim() && config.modelsEndpoint) {
+    try {
+      const upstream = await fetch(config.modelsEndpoint, {
+        headers: config.authHeaders,
+        signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+      });
+      const data = await upstream.json().catch(() => ({})) as { data?: Array<{ id?: string }> };
+      if (!upstream.ok) throw new Error(`Upstream error ${upstream.status}`);
+      upstreamIds = (data.data ?? []).map((item) => item.id ?? '').filter(Boolean);
+    } catch (error) {
+      warning = `Model discovery failed; using the configured allowlist. ${errorMessage(error)}`;
+    }
+  }
+
+  const discovered = new Set(upstreamIds);
+  const models = [...allowed]
+    .filter((id) => id === configuredDefault || discovered.size === 0 || discovered.has(id))
+    .map((id) => ({ id, name: id }));
+  return c.json({ defaultModelId: configuredDefault, models, warning });
+});
+
+app.get('/api/workspace-bindings/:workspaceId', async (c) => {
+  try {
+    return c.json(await workspaceBindingRegistry.resolve(c.req.param('workspaceId')));
+  } catch (error) {
+    return c.json({ error: errorMessage(error) }, 404);
+  }
+});
+
+app.post('/api/workspace-bindings/:workspaceId/pick', async (c) => {
+  try {
+    const binding = await workspaceBindingRegistry.pickAndBind(c.req.param('workspaceId'));
+    if (!binding) return c.json({ cancelled: true });
+    return c.json(binding);
+  } catch (error) {
+    return c.json({ error: errorMessage(error) }, 400);
+  }
+});
+
+app.post('/api/workspace-bindings/:workspaceId/bind', async (c) => {
+  const body = await c.req.json<{ path?: string }>().catch(() => ({}));
+  if (!body.path?.trim()) return c.json({ error: 'A workspace path is required.' }, 400);
+  try {
+    return c.json(await workspaceBindingRegistry.bindPath(c.req.param('workspaceId'), body.path));
+  } catch (error) {
+    return c.json({ error: errorMessage(error) }, 400);
   }
 });
 
@@ -162,91 +232,65 @@ app.post('/api/llm', async (c) => {
   }
 });
 
-// Agent endpoint
-app.post('/api/agent', async (c) => {
-  const provider = providerFromRequest(c);
-  const cfg = resolveLLMConfig(provider);
-  if (!provider || !cfg) {
-    return c.json({ error: `Unknown assistant provider: ${provider ?? 'none'}` }, 400);
+app.post('/api/agent', (c) => c.json({ error: 'Use /api/assistant/turns. The direct-model assistant route has been retired.' }, 410));
+
+app.get('/api/assistant/skills', async (c) => {
+  const workspaceId = c.req.query('workspaceId');
+  if (!workspaceId) return c.json({ error: 'workspaceId is required.' }, 400);
+  try {
+    const skills = await skillRegistry.list(workspaceId);
+    return c.json({ skills: skills.map((skill) => ({
+      name: skill.name,
+      description: skill.description,
+      source: skill.source,
+      enabled: skill.enabled,
+      error: skill.error,
+    })) });
+  } catch (error) {
+    return c.json({ error: errorMessage(error) }, 400);
   }
-  if (!cfg.apiKey || !cfg.model) {
-    return c.json({ error: `Assistant provider is not configured. Set ${cfg.envKey} and its model environment variable.` }, 502);
+});
+
+app.get('/api/assistant/mcp/status', () => {
+  const enabled = process.env.MESHCLI_FILESYSTEM_MCP_ENABLED !== 'false';
+  return Response.json({
+    servers: [{
+      id: 'workspace-filesystem',
+      transport: 'stdio',
+      enabled,
+      status: enabled ? 'configured' : 'disabled',
+      tools: enabled ? ['read_text_file', 'read_multiple_files', 'list_directory', 'directory_tree', 'search_files', 'get_file_info'] : [],
+      readOnly: true,
+    }],
+  });
+});
+
+app.post('/api/assistant/turns', async (c) => {
+  const parsed = AssistantTurnRequestSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) return c.json({ error: 'Invalid assistant turn.', issues: parsed.error.issues }, 400);
+  if (parsed.data.canvas.workspaceId !== parsed.data.workspaceId) return c.json({ error: 'Canvas workspace does not match the assistant workspace.' }, 409);
+  try {
+    const binding = await workspaceBindingRegistry.resolve(parsed.data.workspaceId).catch(() => undefined);
+    const activatedSkills = await skillRegistry.activate(parsed.data.workspaceId, parsed.data.message);
+    return await assistantGateway.start({ ...parsed.data, workspaceRoot: binding?.sourceRoot ?? '', activatedSkills }, c.req.raw.signal);
+  } catch (error) {
+    return c.json({ error: errorMessage(error) }, 502);
   }
+});
 
-  const { message, canvasState } = await c.req.json<{
-    message?: string;
-    canvasState?: { nodes?: unknown[]; edges?: unknown[] };
-  }>();
-  if (!message?.trim()) return c.json({ error: 'Assistant message is required.' }, 400);
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let model: any;
-
-  if (cfg.provider === 'anthropic') {
-    const anthropic = createAnthropic({
-      apiKey: cfg.apiKey,
-      baseURL: cfg.endpoint.replace(/\/messages$/, ''),
-    });
-    model = anthropic(cfg.model);
-  } else {
-    const openai = createOpenAI({
-      apiKey: cfg.apiKey,
-      baseURL: cfg.endpoint.replace(/\/chat\/completions$/, ''),
-    });
-    model = openai.chat(cfg.model);
+app.post('/api/assistant/actions/:actionId/resolve', async (c) => {
+  const parsed = AssistantActionResolveSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) return c.json({ error: 'Invalid assistant action result.', issues: parsed.error.issues }, 400);
+  if (parsed.data.result.actionId !== c.req.param('actionId')) return c.json({ error: 'Action result does not match the route.' }, 409);
+  if (parsed.data.workspaceId !== parsed.data.canvas.workspaceId || parsed.data.workspaceId !== parsed.data.result.workspaceId) {
+    return c.json({ error: 'Action, canvas, and assistant workspace must match.' }, 409);
   }
-
-  // Build system prompt with canvas state
-  const nodeCount = canvasState?.nodes?.length ?? 0;
-  const edgeCount = canvasState?.edges?.length ?? 0;
-  
-  const systemPrompt = `You are the MeshCLI workspace assistant, helping users understand and organize their conversation canvas.
-
-Current canvas state:
-- ${nodeCount} nodes
-- ${edgeCount} edges
-
-Current capability boundary:
-- You can answer questions and propose node, branch, merge, focus, or visualization plans.
-- No canvas mutation tools are connected in this build.
-- You cannot actually create, delete, connect, merge, focus, or update nodes.
-- Never claim that a canvas action has completed.
-- When asked to change the canvas, label the response as a proposed action and clearly say that execution is not available yet.`;
-
-  const encoder = new TextEncoder();
-  const event = (type: string, data: Record<string, unknown>) =>
-    encoder.encode(`data: ${JSON.stringify({ type, data })}\n\n`);
-
-  const result = streamText({
-    model,
-    system: systemPrompt,
-    messages: [{ role: 'user', content: message }],
-    abortSignal: c.req.raw.signal,
-  });
-
-  const eventStream = new ReadableStream<Uint8Array>({
-    async start(controller) {
-      controller.enqueue(event('message_start', { provider: cfg.provider, model: cfg.model }));
-      try {
-        for await (const delta of result.textStream) {
-          controller.enqueue(event('text_delta', { delta }));
-        }
-        controller.enqueue(event('message_end', {}));
-      } catch (error) {
-        controller.enqueue(event('error', { error: errorMessage(error) }));
-      } finally {
-        controller.close();
-      }
-    },
-  });
-
-  return new Response(eventStream, {
-    headers: {
-      'Content-Type': 'text/event-stream; charset=utf-8',
-      'Cache-Control': 'no-store',
-      'Connection': 'keep-alive',
-    },
-  });
+  try {
+    const binding = await workspaceBindingRegistry.resolve(parsed.data.workspaceId).catch(() => undefined);
+    return await assistantGateway.resume({ ...parsed.data, workspaceRoot: binding?.sourceRoot ?? '' }, c.req.raw.signal);
+  } catch (error) {
+    return c.json({ error: errorMessage(error) }, 502);
+  }
 });
 
 // Node execution gateway. OpenHands runs against an isolated managed copy and
@@ -256,11 +300,22 @@ app.post('/api/node-runs', async (c) => {
   if (!parsed.success) {
     return c.json({ error: 'Invalid node run request', issues: parsed.error.issues }, 400);
   }
-  return c.json(agentRuns.create(parsed.data), 202);
+  const { configuredDefault, allowed } = agentModelConfig();
+  const agentModelId = parsed.data.agentModelId ?? configuredDefault;
+  if (!agentModelId || !allowed.has(agentModelId)) {
+    return c.json({ error: `Agent model is not allowed: ${agentModelId ?? 'none'}` }, 400);
+  }
+  try {
+    await workspaceBindingRegistry.resolve(parsed.data.workspaceId);
+  } catch (error) {
+    return c.json({ error: errorMessage(error) }, 400);
+  }
+  return c.json(agentRuns.create({ ...parsed.data, agentModelId }), 202);
 });
 
-app.get('/api/runs/:runId/events', (c) => {
-  const run = agentRuns.get(c.req.param('runId'));
+app.get('/api/runs/:runId/events', async (c) => {
+  const runId = c.req.param('runId');
+  const run = agentRuns.get(runId) ?? await agentRuns.restore(runId);
   if (!run) return c.json({ error: 'Run not found' }, 404);
 
   const encoder = new TextEncoder();
@@ -305,7 +360,7 @@ app.post('/api/runs/:runId/cancel', async (c) => {
 
 app.post('/api/runs/:runId/apply', async (c) => {
   const runId = c.req.param('runId');
-  const run = agentRuns.get(runId);
+  const run = agentRuns.get(runId) ?? await agentRuns.restore(runId);
   if (!run) return c.json({ error: 'Run not found' }, 404);
   const parsedDecision = AgentReviewDecisionSchema.safeParse(await c.req.json().catch(() => null));
   if (!parsedDecision.success) {
@@ -320,12 +375,12 @@ app.post('/api/runs/:runId/apply', async (c) => {
   }
   const event = await agentRuns.apply(runId);
   if (!event) return c.json({ error: 'Run is not ready to apply' }, 409);
-  return c.json(event, event.type === 'patch_conflict' ? 409 : 200);
+  return c.json(event, event.type === 'patch_conflict' ? 409 : event.type === 'review_ready' ? 202 : 200);
 });
 
 app.post('/api/runs/:runId/reject', async (c) => {
   const runId = c.req.param('runId');
-  const run = agentRuns.get(runId);
+  const run = agentRuns.get(runId) ?? await agentRuns.restore(runId);
   if (!run) return c.json({ error: 'Run not found' }, 404);
   const parsedDecision = AgentReviewDecisionSchema.safeParse(await c.req.json().catch(() => null));
   if (!parsedDecision.success) {
@@ -343,12 +398,30 @@ app.post('/api/runs/:runId/reject', async (c) => {
   return c.json(event);
 });
 
+app.post('/api/runs/:runId/undo', async (c) => {
+  const runId = c.req.param('runId');
+  const run = agentRuns.get(runId) ?? await agentRuns.restore(runId);
+  if (!run) return c.json({ error: 'Run not found' }, 404);
+  const parsedDecision = AgentReviewDecisionSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsedDecision.success) return c.json({ error: 'A valid undo decision is required' }, 400);
+  const decision = parsedDecision.data;
+  if (decision.changeSetId !== run.changeSet?.changeSetId) {
+    return c.json({ error: 'Undo is not bound to the applied change set' }, 409);
+  }
+  if (decision.actionId !== `undo-${decision.changeSetId}`) {
+    return c.json({ error: 'Invalid undo action' }, 400);
+  }
+  const event = await agentRuns.undo(runId);
+  if (!event) return c.json({ error: 'Run is not available for undo' }, 409);
+  return c.json(event, event.type === 'undo_conflict' ? 409 : 200);
+});
+
 const port = Number(process.env.PORT ?? 4000);
 
 serve({ fetch: app.fetch, port }, () => {
   console.log(`BFF ready at http://localhost:${port}`);
   console.log(`LLM proxy: http://localhost:${port}/api/llm`);
-  console.log(`Agent: http://localhost:${port}/api/agent`);
+  console.log(`Workspace assistant: http://localhost:${port}/api/assistant/turns`);
   console.log(`Node runs: http://localhost:${port}/api/node-runs`);
   console.log(`Execution adapter: ${configuredAdapter.name}`);
 });

@@ -12,6 +12,33 @@ async function responseError(response: Response): Promise<string> {
 }
 
 export class NodeRunClient {
+  async getAgentModels(): Promise<{ defaultModelId: string; models: Array<{ id: string; name: string }>; warning?: string }> {
+    const response = await fetch('/api/agent/models');
+    if (!response.ok) throw new Error(await responseError(response));
+    return response.json();
+  }
+
+  async getWorkspaceBinding(workspaceId: string): Promise<WorkspaceBinding | undefined> {
+    const response = await fetch(`/api/workspace-bindings/${encodeURIComponent(workspaceId)}`);
+    if (response.status === 404) return undefined;
+    if (!response.ok) throw new Error(await responseError(response));
+    return response.json();
+  }
+
+  async pickWorkspaceBinding(workspaceId: string): Promise<WorkspaceBinding | undefined> {
+    const response = await fetch(`/api/workspace-bindings/${encodeURIComponent(workspaceId)}/pick`, { method: 'POST' });
+    if (!response.ok) throw new Error(await responseError(response));
+    const body = await response.json() as WorkspaceBinding & { cancelled?: boolean };
+    return body.cancelled ? undefined : body;
+  }
+
+  async bindWorkspace(workspaceId: string, path: string): Promise<WorkspaceBinding> {
+    const response = await fetch(`/api/workspace-bindings/${encodeURIComponent(workspaceId)}/bind`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path }),
+    });
+    if (!response.ok) throw new Error(await responseError(response));
+    return response.json();
+  }
   async createRun(input: AgentRunRequest): Promise<AgentRunCreated> {
     const response = await fetch('/api/node-runs', {
       method: 'POST',
@@ -86,6 +113,25 @@ export class NodeRunClient {
     })));
     throw new Error('Gateway returned an invalid review event.');
   }
+
+  async undoRun(runId: string, changeSetId: string): Promise<AgentEvent> {
+    const response = await fetch(`/api/runs/${encodeURIComponent(runId)}/undo`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ changeSetId, actionId: `undo-${changeSetId}` }),
+    });
+    const body = await response.json().catch(() => null);
+    const parsed = AgentEventSchema.safeParse(body);
+    if (parsed.success) return parsed.data;
+    throw new Error(body?.error || 'Gateway returned an invalid undo event.');
+  }
+}
+
+export interface WorkspaceBinding {
+  workspaceId: string;
+  sourceRoot: string;
+  defaultWorkingDirectory: string;
+  updatedAt: number;
 }
 
 export const nodeRunClient = new NodeRunClient();

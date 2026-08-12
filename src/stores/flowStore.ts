@@ -143,7 +143,7 @@ export const useFlowStore = create<FlowState>((set, get) => ({
         let blocks: A2UIBlock[] = parsedBlock?.success
           ? [...(run.blocks ?? []).filter((block) => block.id !== parsedBlock.data.block.id), parsedBlock.data.block]
           : run.blocks ?? [];
-        if (event.type === 'patch_applied' || event.type === 'patch_rejected' || event.type === 'patch_conflict') {
+        if (event.type === 'patch_applied' || event.type === 'patch_rejected' || event.type === 'patch_conflict' || event.type === 'patch_reverted') {
           blocks = blocks.map((block) => {
             if (block.type === 'confirmation') {
               return {
@@ -154,7 +154,7 @@ export const useFlowStore = create<FlowState>((set, get) => ({
             if (block.type === 'diff_review') {
               return {
                 ...block,
-                status: event.type === 'patch_applied' ? 'applied' : event.type === 'patch_rejected' ? 'rejected' : 'conflicted',
+                status: event.type === 'patch_applied' ? 'applied' : event.type === 'patch_reverted' ? 'reverted' : event.type === 'patch_rejected' ? 'rejected' : 'conflicted',
               };
             }
             return block;

@@ -1,11 +1,12 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ChevronDown, Plus, Trash2, Download, Upload, Check, Pencil, Github, FileText } from 'lucide-react';
+import { ChevronDown, Plus, Trash2, Download, Upload, Check, Pencil, Github, FileText, FolderGit2 } from 'lucide-react';
 import { useWorkspaceStore } from '../../stores/workspaceStore';
 import { useFlowStore } from '../../stores/flowStore';
 import { useChatStore } from '../../stores/chatStore';
 import { exportWorkspace, importWorkspace } from '../../hooks/usePersistence';
 import { exportMarkdown } from '../../utils/markdownExport';
+import { nodeRunClient, type WorkspaceBinding } from '../../services/agent/nodeRunClient';
 
 export function WorkspaceSelector() {
   const { t } = useTranslation();
@@ -19,12 +20,48 @@ export function WorkspaceSelector() {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState('');
+  const [binding, setBinding] = useState<WorkspaceBinding>();
+  const [bindingError, setBindingError] = useState<string>();
+  const [isPickingFolder, setIsPickingFolder] = useState(false);
 
   const dropdownRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const active = workspaces.find((w) => w.id === activeWorkspaceId);
+
+  useEffect(() => {
+    if (!activeWorkspaceId) return setBinding(undefined);
+    setBindingError(undefined);
+    nodeRunClient.getWorkspaceBinding(activeWorkspaceId)
+      .then(setBinding)
+      .catch((error) => setBindingError(error instanceof Error ? error.message : String(error)));
+  }, [activeWorkspaceId]);
+
+  const handlePickRepository = useCallback(async () => {
+    if (!activeWorkspaceId || isPickingFolder) return;
+    setIsPickingFolder(true);
+    setBindingError(undefined);
+    try {
+      const next = await nodeRunClient.pickWorkspaceBinding(activeWorkspaceId);
+      if (next) setBinding(next);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const manualPath = window.prompt(`Folder picker failed: ${message}\n\nEnter an absolute path inside a Git repository instead:`);
+      if (manualPath?.trim()) {
+        try {
+          setBinding(await nodeRunClient.bindWorkspace(activeWorkspaceId, manualPath));
+          return;
+        } catch (manualError) {
+          setBindingError(manualError instanceof Error ? manualError.message : String(manualError));
+          return;
+        }
+      }
+      setBindingError(message);
+    } finally {
+      setIsPickingFolder(false);
+    }
+  }, [activeWorkspaceId, isPickingFolder]);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -127,7 +164,7 @@ export function WorkspaceSelector() {
       flow.nodes,
       flow.edges,
       chat.conversations,
-      workspace?.name ?? 'CaudalFlow Workspace',
+      workspace?.name ?? 'MeshCLI Workspace',
       { selectedNodeIds: selectedIds }
     );
   }, []);
@@ -142,7 +179,7 @@ export function WorkspaceSelector() {
   );
 
   return (
-    <div className="h-9 bg-surface-950 border-b border-border flex items-center px-3 shrink-0 select-none">
+    <div className="relative h-9 bg-surface-950 border-b border-border flex items-center px-3 shrink-0 select-none">
       {/* Left: workspace name + dropdown */}
       <div className="relative" ref={dropdownRef}>
         {editing ? (
@@ -219,6 +256,22 @@ export function WorkspaceSelector() {
       {/* Spacer */}
       <div className="flex-1" />
 
+      <button
+        type="button"
+        onClick={handlePickRepository}
+        disabled={!activeWorkspaceId || isPickingFolder}
+        className={`mr-2 flex max-w-72 items-center gap-1.5 rounded-md border px-2 py-1 text-[10px] transition-colors ${binding ? 'border-emerald-500/30 text-emerald-300' : 'border-amber-500/30 text-amber-300'} disabled:opacity-40`}
+        title={bindingError || binding?.sourceRoot || 'Bind this MeshCLI workspace to a Git repository'}
+      >
+        <FolderGit2 size={13} />
+        <span className="truncate">{isPickingFolder ? 'Selecting…' : binding ? `${binding.sourceRoot}${binding.defaultWorkingDirectory ? ` · ${binding.defaultWorkingDirectory}` : ''}` : 'Bind Git repository'}</span>
+      </button>
+      {bindingError && (
+        <div role="alert" className="absolute right-24 top-10 z-50 max-w-md rounded-lg border border-red-500/40 bg-surface-950 px-3 py-2 text-xs text-red-300 shadow-xl">
+          {bindingError}
+        </div>
+      )}
+
       {/* Right: export + import + github */}
       <div className="flex items-center gap-1">
         <button
@@ -243,7 +296,7 @@ export function WorkspaceSelector() {
           <Upload size={15} />
         </button>
         <a
-          href="https://github.com/yancongya/caudalflow"
+          href="https://github.com/yanzihan0320/MeshCLI"
           target="_blank"
           rel="noopener noreferrer"
           className="p-1.5 text-text-muted hover:text-text-primary transition-colors"

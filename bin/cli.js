@@ -92,11 +92,11 @@ async function start() {
   }
 
   const url = `http://localhost:${port}`;
-  console.log(`\n  CaudalFlow is running at ${url}\n`);
+  console.log(`\n  MeshCLI is running at ${url}\n`);
   openBrowser(url);
 }
 
 start().catch((err) => {
-  console.error("Failed to start CaudalFlow:", err.message);
+  console.error("Failed to start MeshCLI:", err.message);
   process.exit(1);
 });

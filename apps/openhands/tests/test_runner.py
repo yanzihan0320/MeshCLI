@@ -44,6 +44,21 @@ def test_relative_agent_path_for_docker(tmp_path: Path) -> None:
     assert runner.relative_agent_path("/workspace/src/app.py", tmp_path, "docker") == "src/app.py"
 
 
+def test_resolve_working_directory_stays_inside_workspace(tmp_path: Path) -> None:
+    child = tmp_path / "packages" / "app"
+    child.mkdir(parents=True)
+    local, docker = runner.resolve_working_directory(tmp_path, "packages/app")
+    assert local == child.resolve()
+    assert docker == "/workspace/packages/app"
+
+
+def test_resolve_working_directory_rejects_parent_escape(tmp_path: Path) -> None:
+    import pytest
+
+    with pytest.raises(ValueError, match="stay inside"):
+        runner.resolve_working_directory(tmp_path, "../outside")
+
+
 def test_terminal_side_effects_are_detected(tmp_path: Path, monkeypatch) -> None:
     subprocess.run(["git", "init", "--quiet"], cwd=tmp_path, check=True)
     subprocess.run(["git", "config", "user.name", "MeshCLI Test"], cwd=tmp_path, check=True)

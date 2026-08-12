@@ -1,4 +1,4 @@
-"""LangGraph entry point for the CaudalFlow Copilot agent."""
+"""LangGraph entry point for the MeshCLI workspace assistant."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 
 from src.prompts import SYSTEM_PROMPT
 from src.runtime import build_graph
+from src.canvas_tools import CANVAS_TOOLS, MCP_TOOLS
 
 
 AGENT_DIR = Path(__file__).resolve().parent
@@ -29,13 +30,13 @@ if not (
     runtime = "noop"
     print(
         "\n[runtime] model API key missing — using noop fallback graph.\n"
-        "Set ANTHROPIC_API_KEY, GEMINI_API_KEY, or OPENAI_API_KEY in apps/agent/.env to enable the CaudalFlow agent.\n",
+        "Set ANTHROPIC_API_KEY, GEMINI_API_KEY, or OPENAI_API_KEY in apps/agent/.env to enable the MeshCLI assistant.\n",
         flush=True,
     )
 
 graph = build_graph(
     runtime,
-    tools=[],
+    tools=[*CANVAS_TOOLS, *MCP_TOOLS],
     system_prompt=SYSTEM_PROMPT,
 )
 

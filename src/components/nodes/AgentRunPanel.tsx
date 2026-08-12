@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { ChevronDown, ChevronRight, Square, Terminal } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { ChevronDown, ChevronRight, RotateCcw, Square, Terminal } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -15,6 +15,7 @@ interface AgentRunPanelProps {
   onCancel: () => void;
   onApply: (changeSetId?: string) => void;
   onReject: (changeSetId?: string) => void;
+  onUndo: (changeSetId?: string) => void;
   fullHeight?: boolean;
 }
 
@@ -26,7 +27,9 @@ function eventDetail(event: AgentEvent): string {
   if (event.type === 'file_changed') return String(event.payload.path ?? 'File changed');
   if (event.type === 'change_set_created') return 'Change set created';
   if (event.type === 'review_ready') return String(event.payload.message ?? 'Ready for review');
-  if (event.type === 'patch_applied' || event.type === 'patch_rejected') return String(event.payload.message ?? '');
+  if (event.type === 'patch_applied' || event.type === 'patch_rejected' || event.type === 'patch_reverted') return String(event.payload.message ?? '');
+  if (event.type === 'undo_conflict') return String(event.payload.error ?? 'Undo conflict');
+  if (event.type === 'change_set_rebased') return String(event.payload.message ?? 'Change set replayed on the latest project');
   if (event.type === 'patch_conflict') return String(event.payload.error ?? 'Patch conflict');
   if (event.type === 'a2ui_block') {
     const block = event.payload.block;
@@ -45,7 +48,7 @@ function runVisualizationBlocks(run: AgentRunRecord): A2UIBlock[] {
   const planSeen = run.events.some((event) => event.type === 'plan_updated');
   const executionSeen = run.events.some((event) => ['tool_started', 'command_started', 'file_changed', 'change_set_created'].includes(event.type));
   const reviewSeen = run.status === 'review_ready' || ['applying', 'applied', 'rejected', 'conflicted'].includes(run.status);
-  const applied = run.status === 'applied';
+  const applied = run.status === 'applied' || run.status === 'reverted';
   const commandCount = run.events.filter((event) => event.type === 'command_started').length;
   const fileCount = run.changeSet?.files.length ?? run.events.filter((event) => event.type === 'file_changed').length;
   const stepStatus = (complete: boolean, active: boolean, error = false) => (
@@ -88,6 +91,7 @@ export function AgentRunPanel({
   onCancel,
   onApply,
   onReject,
+  onUndo,
   fullHeight = false,
 }: AgentRunPanelProps) {
   const { t } = useTranslation();
@@ -110,12 +114,24 @@ export function AgentRunPanel({
     const processBlocks = runVisualizationBlocks(run);
     if (run.blocks?.length) return [...processBlocks, ...run.blocks];
     if (!run.changeSet) return processBlocks;
-    const status = run.status === 'applied' || run.status === 'rejected' || run.status === 'conflicted'
+    const status = run.status === 'applied' || run.status === 'reverted' || run.status === 'rejected' || run.status === 'conflicted'
       ? run.status
       : 'pending';
     return [...processBlocks, ...createChangeSetReviewBlocks(run.changeSet, status)];
   }, [run]);
   const expanded = fullHeight || (run ? collapsedRunId !== run.runId : emptyPanelExpanded);
+  const appliedEvent = run?.events.findLast((event) => event.type === 'patch_applied');
+  const undoExpiresAt = Number(appliedEvent?.payload.undoExpiresAt ?? 0);
+  const [undoRemainingMs, setUndoRemainingMs] = useState(Number.POSITIVE_INFINITY);
+  useEffect(() => {
+    if (!undoExpiresAt) return;
+    const timer = window.setInterval(() => {
+      setUndoRemainingMs(Math.max(0, undoExpiresAt - Date.now()));
+    }, 1_000);
+    return () => window.clearInterval(timer);
+  }, [undoExpiresAt]);
+  const canUndo = run?.status === 'applied' && undoExpiresAt > 0 && undoRemainingMs > 0;
+  const undoRemainingHours = Math.max(1, Math.ceil(undoRemainingMs / 3_600_000));
 
   const toggleExpanded = () => {
     if (!run) {
@@ -150,6 +166,17 @@ export function AgentRunPanel({
             className="flex items-center gap-1 rounded-md bg-red-500/15 px-2 py-1 text-[10px] font-medium text-red-400 hover:bg-red-500/25"
           >
             <Square size={11} /> {t('agentRun.stop')}
+          </button>
+        )}
+        {canUndo && (
+          <button
+            type="button"
+            onClick={() => onUndo(run?.changeSet?.changeSetId)}
+            disabled={isReviewing}
+            className="flex items-center gap-1 rounded-md bg-amber-500/15 px-2 py-1 text-[10px] font-medium text-amber-300 hover:bg-amber-500/25 disabled:opacity-40"
+            title={`Undo available until ${new Date(undoExpiresAt).toLocaleString()}`}
+          >
+            <RotateCcw size={11} /> Undo{Number.isFinite(undoRemainingMs) ? ` · ${undoRemainingHours}h` : ''}
           </button>
         )}
       </div>

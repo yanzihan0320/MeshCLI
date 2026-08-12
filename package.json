@@ -1,9 +1,10 @@
 {
-  "name": "caudalflow",
+  "name": "meshcli",
   "version": "2.0.0",
   "description": "Visual canvas for AI conversations — branch, explore in parallel, merge insights",
   "type": "module",
   "bin": {
+    "meshcli": "./bin/cli.js",
     "caudalflow": "./bin/cli.js"
   },
   "files": [
@@ -14,12 +15,12 @@
     "dev": "vite",
     "dev:ui": "vite",
     "dev:bff": "tsx watch --env-file=apps/agent/.env apps/bff/src/server.ts",
-    "dev:agent": "cd apps/agent && .venv/bin/langgraph dev --port 8133",
-    "dev:agent:win": "cd apps/agent && .venv\\Scripts\\langgraph.exe dev --port 8133",
-    "dev:agent:global": "cd apps/agent && langgraph dev --port 8133",
+    "dev:agent": "node scripts/start-agent.mjs",
+    "dev:agent:win": "node scripts/start-agent.mjs",
+    "dev:agent:global": "node scripts/start-agent.mjs --global",
     "dev:copilot": "concurrently -k -n ui,bff,agent -c blue,cyan,green \"npm run dev:ui\" \"npm run dev:bff\" \"npm run dev:agent\"",
-    "install:agent": "cd apps/agent && python3 -m venv .venv && .venv/bin/pip install -U pip && .venv/bin/pip install -e .",
-    "install:agent:win": "cd apps/agent && python -m venv .venv && .venv\\Scripts\\pip.exe install -U pip && .venv\\Scripts\\pip.exe install -e .",
+    "install:agent": "node scripts/install-agent.mjs",
+    "install:agent:win": "node scripts/install-agent.mjs",
     "install:openhands": "uv sync --project apps/openhands --python 3.12",
     "test:openhands": "cd apps/openhands && uv run pytest",
     "smoke:openhands": "tsx --env-file=apps/agent/.env scripts/smoke-openhands.ts",
@@ -45,9 +46,9 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/caudal-labs/caudalflow.git"
+    "url": "git+https://github.com/yanzihan0320/MeshCLI.git"
   },
-  "homepage": "https://github.com/caudal-labs/caudalflow",
+  "homepage": "https://github.com/yanzihan0320/MeshCLI",
   "license": "MIT",
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.81",

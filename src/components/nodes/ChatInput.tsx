@@ -1,7 +1,11 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Bot, Check, ChevronDown, MessageCircle, Paperclip, Play, Send, Square, X } from 'lucide-react';
+import { Bot, Check, ChevronDown, FolderTree, Link2, MessageCircle, Paperclip, Play, Save, Send, Square, X } from 'lucide-react';
 import { useChatStore } from '../../stores/chatStore';
+import { useFlowStore } from '../../stores/flowStore';
+import { useWorkspaceStore } from '../../stores/workspaceStore';
+import { nodeRunClient } from '../../services/agent/nodeRunClient';
+import type { AgentRunOptions } from '../../hooks/useNodeAgentRun';
 
 export type InputMode = 'chat' | 'agent';
 
@@ -9,7 +13,7 @@ interface ChatInputProps {
   nodeId: string;
   onSend: (message: string, images: File[]) => void;
   onCancel: () => void;
-  onRunAgent: (prompt: string, files?: File[]) => void;
+  onRunAgent: (prompt: string, files?: File[], options?: AgentRunOptions) => void;
   onCancelAgent: () => void;
   isAgentRunning: boolean;
   supportsVision?: boolean;
@@ -33,6 +37,17 @@ export function ChatInput({
   const [images, setImages] = useState<File[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [modeMenuOpen, setModeMenuOpen] = useState(false);
+  const [agentModelId, setAgentModelId] = useState('');
+  const [agentModels, setAgentModels] = useState<Array<{ id: string; name: string }>>([]);
+  const [workingDirectory, setWorkingDirectory] = useState('');
+  const [referenceNodeIds, setReferenceNodeIds] = useState<string[]>([]);
+  const [optionsOpen, setOptionsOpen] = useState(false);
+  const activeWorkspaceId = useWorkspaceStore((state) => state.activeWorkspaceId);
+  const activeWorkspace = useWorkspaceStore((state) => state.workspaces.find((workspace) => workspace.id === state.activeWorkspaceId));
+  const flowNodes = useFlowStore((state) => state.nodes);
+  const referenceOptions = useMemo(() => flowNodes
+    .filter((node) => node.id !== nodeId)
+    .map((node) => ({ id: node.id, title: node.data.topic || node.data.label || 'Untitled node' })), [flowNodes, nodeId]);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -41,13 +56,24 @@ export function ChatInput({
   );
   const isBusy = mode === 'agent' ? isAgentRunning : isStreaming;
 
+  useEffect(() => {
+    if (mode !== 'agent') return;
+    let active = true;
+    nodeRunClient.getAgentModels().then((result) => {
+      if (!active) return;
+      setAgentModels(result.models);
+      setAgentModelId((current) => current || activeWorkspace?.defaultAgentModelId || result.defaultModelId);
+    }).catch(() => undefined);
+    return () => { active = false; };
+  }, [activeWorkspace?.defaultAgentModelId, mode]);
+
   const handleSend = useCallback(() => {
     const trimmed = input.trim();
     if (isBusy) return;
 
     if (mode === 'agent') {
       if (!trimmed) return;
-      onRunAgent(trimmed, images);
+      onRunAgent(trimmed, images, { agentModelId: agentModelId || undefined, workingDirectory, referenceNodeIds });
       setInput('');
       setImages([]);
       return;
@@ -58,7 +84,7 @@ export function ChatInput({
     onSend(trimmed, images);
     setInput('');
     setImages([]);
-  }, [input, images, isBusy, mode, onRunAgent, onSend]);
+  }, [agentModelId, input, images, isBusy, mode, onRunAgent, onSend, referenceNodeIds, workingDirectory]);
 
   const selectMode = (nextMode: InputMode) => {
     onModeChange(nextMode);
@@ -152,6 +178,46 @@ export function ChatInput({
               <button type="button" onClick={() => removeImage(index)} aria-label={`Remove ${file.name}`}><X size={10} /></button>
             </span>
           ))}
+        </div>
+      )}
+
+      {mode === 'agent' && (
+        <div className="mb-2 rounded-lg border border-border bg-surface-950/60 p-1.5 text-[10px]">
+          <button type="button" onClick={() => setOptionsOpen((open) => !open)} className="flex w-full items-center gap-1.5 text-text-secondary hover:text-text-primary">
+            <FolderTree size={11} /> {t('agentRun.options')}
+            <span className="ml-auto text-text-muted">{agentModelId || t('agentRun.model')} · {workingDirectory || t('agentRun.repositoryRoot')}{referenceNodeIds.length ? ` · ${referenceNodeIds.length} refs` : ''}</span>
+            <ChevronDown size={11} className={optionsOpen ? 'rotate-180' : ''} />
+          </button>
+          {optionsOpen && (
+            <div className="mt-2 grid gap-2 border-t border-border pt-2">
+              <label className="grid grid-cols-[72px_1fr_auto] items-center gap-1.5 text-text-muted">
+                <span>{t('agentRun.model')}</span>
+                <select value={agentModelId} onChange={(event) => setAgentModelId(event.target.value)} className="rounded border border-border bg-surface-800 px-2 py-1 text-text-primary outline-none">
+                  {agentModels.map((model) => <option key={model.id} value={model.id}>{model.name}</option>)}
+                </select>
+                <button type="button" title="Save as workspace default" disabled={!activeWorkspaceId || !agentModelId} onClick={() => activeWorkspaceId && useWorkspaceStore.getState().setDefaultAgentModel(activeWorkspaceId, agentModelId)} className="rounded p-1 text-text-muted hover:text-accent-400 disabled:opacity-30"><Save size={12} /></button>
+              </label>
+              <label className="grid grid-cols-[96px_1fr] items-center gap-1.5 text-text-muted">
+                <span>{t('agentRun.workingSubdirectory')}</span>
+                <input value={workingDirectory} onChange={(event) => setWorkingDirectory(event.target.value)} placeholder={t('agentRun.workingSubdirectoryPlaceholder')} className="rounded border border-border bg-surface-800 px-2 py-1 text-text-primary outline-none" />
+                <span />
+                <span className="leading-4 text-text-muted">{t('agentRun.workingSubdirectoryHelp')}</span>
+              </label>
+              {referenceOptions.length > 0 && (
+                <div className="grid grid-cols-[72px_1fr] gap-1.5 text-text-muted">
+                  <span className="flex items-center gap-1"><Link2 size={10} /> {t('agentRun.context')}</span>
+                  <div className="max-h-24 space-y-1 overflow-y-auto rounded border border-border bg-surface-800 p-1.5">
+                    {referenceOptions.map((option) => (
+                      <label key={option.id} className="flex items-center gap-1.5 text-text-secondary">
+                        <input type="checkbox" checked={referenceNodeIds.includes(option.id)} onChange={() => setReferenceNodeIds((ids) => ids.includes(option.id) ? ids.filter((id) => id !== option.id) : [...ids, option.id])} />
+                        <span className="truncate">{option.title}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 

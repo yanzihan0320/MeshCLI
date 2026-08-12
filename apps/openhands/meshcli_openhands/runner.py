@@ -252,10 +252,10 @@ def load_request() -> dict[str, Any]:
     return request
 
 
-def configure_llm() -> LLM:
+def configure_llm(model_override: str | None = None) -> LLM:
     api_key = os.environ.get("OPENAI_API_KEY", "").strip()
     base_url = os.environ.get("OPENAI_BASE_URL", "").strip()
-    configured_model = os.environ.get("OPENAI_MODEL", "").strip()
+    configured_model = (model_override or os.environ.get("OPENAI_MODEL", "")).strip()
     if not api_key or not base_url or not configured_model:
         raise RuntimeError("OPENAI_API_KEY, OPENAI_BASE_URL and OPENAI_MODEL are required")
     model = configured_model if "/" in configured_model else f"openai/{configured_model}"
@@ -281,6 +281,21 @@ def stop_conversation(_signum: int, _frame: Any) -> None:
             pass
 
 
+def resolve_working_directory(workspace_path: Path, value: Any) -> tuple[Path, str]:
+    relative = str(value or ".").replace("\\", "/").removeprefix("./") or "."
+    if relative.startswith("/") or ".." in relative.split("/"):
+        raise ValueError("workingDirectory must stay inside the managed workspace")
+    local_path = (workspace_path / relative).resolve()
+    try:
+        local_path.relative_to(workspace_path)
+    except ValueError as error:
+        raise ValueError("workingDirectory escaped the managed workspace") from error
+    if not local_path.is_dir():
+        raise ValueError(f"workingDirectory does not exist: {relative}")
+    docker_path = "/workspace" if relative == "." else f"/workspace/{relative}"
+    return local_path, docker_path
+
+
 def run() -> int:
     global _conversation
     request = load_request()
@@ -291,10 +306,14 @@ def run() -> int:
         raise ValueError(f"Unsupported workspace mode: {mode}")
     if not workspace_path.is_dir():
         raise ValueError("Managed run workspace does not exist")
+    local_working_directory, docker_working_directory = resolve_working_directory(
+        workspace_path,
+        request.get("workingDirectory"),
+    )
     persistence_path.mkdir(parents=True, exist_ok=True)
 
     mapper = EventMapper(workspace_path, mode)
-    llm = configure_llm()
+    llm = configure_llm(str(request.get("model") or ""))
     agent = Agent(
         llm=llm,
         tools=[
@@ -304,7 +323,7 @@ def run() -> int:
         ],
     )
 
-    workspace: Any = workspace_path
+    workspace: Any = local_working_directory
     docker_workspace: DockerWorkspace | None = None
     if mode == "docker":
         mount = f"{workspace_path.as_posix()}:/workspace"
@@ -319,7 +338,7 @@ def run() -> int:
         }
         os.environ.update(remote_env)
         docker_workspace = DockerWorkspace(
-            working_dir="/workspace",
+            working_dir=docker_working_directory,
             server_image=str(
                 request.get(
                     "dockerImage",

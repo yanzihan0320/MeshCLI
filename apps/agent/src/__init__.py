@@ -1,1 +1,1 @@
-"""CaudalFlow Copilot agent package."""
+"""MeshCLI workspace assistant package."""

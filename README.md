@@ -8,7 +8,7 @@ MeshCLI is a visual Agent workspace built on the CaudalFlow canvas. It lets user
 
 ## Project status
 
-MeshCLI is under active development. The repository contains a working CaudalFlow-derived conversation canvas, an early CopilotKit/LangGraph integration, and the first sandboxed execution adapter. Capabilities still marked planned below are architecture targets rather than implemented behavior.
+MeshCLI is under active development. Phases 2–4 are implemented: the Gateway, isolated OpenHands execution, repository-safe Diff/Apply/Undo, replayable events, and the controlled A2UI renderer are working. Phase 5A now connects the right-side assistant to LangGraph and the frontend-owned canvas command loop; later Phase 5 hardening remains explicitly marked below.
 
 | Capability | Status | Notes |
 | --- | --- | --- |
@@ -17,12 +17,13 @@ MeshCLI is under active development. The repository contains a working CaudalFlo
 | Multi-node merge | Available | Synthesizes several conversation paths into a new node |
 | Node-local conversations | Available | Each node keeps its own messages and context |
 | Multi-workspace persistence | Available | Browser persistence plus JSON/Markdown export |
-| Canvas copilot | Prototype | CopilotKit + LangGraph can inspect and operate canvas state |
+| Canvas assistant | Available (Phase 5A core) | Workspace-scoped LangGraph thread, persisted chat/activity, revision-checked native canvas commands, confirmation, and Undo |
 | Agent Gateway and normalized events | Available | Versioned node-run contract, OpenHands adapter, cancellation, and replayable SSE stream |
 | AG-UI-compatible run viewer | Available | Chat/Agent modes, command and file events, Changed Files, unified diff, Apply All, and Reject All |
 | Executable agent adapter | Available | OpenHands SDK + DockerWorkspace; the adapter contract remains vendor-neutral |
 | A2UI-style interactive blocks | Available (core set) | Chat explanations: mind map and comparison; Agent runs: task board, process timeline, metrics, confirmation, and diff review |
-| MCP tools and permission manager | Planned | Filesystem, GitHub, and browser/search integrations first |
+| Skills | Available (read-only v1) | Built-in, global, and repository Skills; activation loads `SKILL.md`, references, and assets but never scripts |
+| MCP tools and permission manager | Available (read-only skeleton) | Server-side registry and allowlisted filesystem MCP bound to the selected repository; writable/OAuth tools remain Phase 5C |
 | Audit log, checkpoints, rollback | Planned | Required before broad autonomous execution |
 
 ## The problem
@@ -51,7 +52,7 @@ The graph is not decoration. It is the durable structure for context, decisions,
 - Running an agent from a node against a selected workspace
 - Streaming run events to the node UI
 - Controlled mind-map, comparison, checklist, confirmation, diff, task-board, process-timeline, and metric-card blocks
-- Filesystem, GitHub, and browser/search tools through MCP-compatible connectors
+- A read-only filesystem MCP connector; GitHub and browser/search connectors follow in Phase 5C
 - Workspace sandboxing, scoped file access, permission prompts, audit records, and cancellation
 - An adapter boundary so MeshCLI is not coupled to one model or agent runtime
 
@@ -97,16 +98,15 @@ MeshCLI Graph UI (CaudalFlow foundation)
         |
         +-- A2UI-style block renderer
         +-- AG-UI-compatible event viewer
+        +-- Native CanvasCommand executor + transaction Undo
         |
-Agent Gateway
+Browser-facing BFF (workspace and secret boundary)
         |
-Workflow Orchestrator (LangGraph initially)
+Right-side assistant: LangGraph + Skills + read-only MCP
         |
-Agent Adapter Layer
+Node Agent Mode: Agent Gateway + Adapter Layer
         |
 Execution Runtime (OpenHands adapter first, replaceable)
-        |
-MCP Tools / Skills / Workspace Sandbox
 ```
 
 ### Responsibility boundaries
@@ -120,6 +120,8 @@ MCP Tools / Skills / Workspace Sandbox
 | Agent adapters | One stable interface over different agent runtimes | Product-specific graph rendering |
 | Execution runtime | Reading, editing, commands, tests, observations | Canvas state and product navigation |
 | Tool and safety layer | MCP connections, sandbox, policy, approvals, audit | User-facing reasoning structure |
+
+Canvas operations are deliberately not wrapped as MCP. Unlike a writable Obsidian `.canvas` file, MeshCLI canvas state lives in browser-controlled Zustand/localStorage, so LangGraph emits a versioned `CanvasCommand` and the frontend validates `workspaceId` and `expectedRevision` before applying it. Skills provide instructions, MCP provides external capabilities, LangGraph owns memory/tool choice/interrupts, and OpenHands remains the isolated code-execution adapter used by node Agent Mode.
 
 ### Deliberate architecture decisions
 
@@ -192,7 +194,9 @@ Define versioned run/event schemas, create the Agent Gateway, stream events with
 
 **Status: complete for the OpenHands DockerWorkspace MVP.**
 
-The OpenHands adapter maps messages, plans, commands, observations, and file changes into MeshCLI events. Every run snapshots the current Git working tree—including tracked and untracked user changes—into a managed copy, so users do not need to commit before each run. Docker mode mounts only that copy, creates a binary-safe Agent-only patch, and waits for Apply All or Reject All before the Gateway can touch the real project. Agent Mode uses the full node content area, accepts bounded text-file references, and preserves the Agent's final narrative response in chat history.
+The OpenHands adapter maps messages, plans, commands, observations, and file changes into MeshCLI events. A BFF-owned binding connects each MeshCLI workspace to a Git repository; the browser never supplies an arbitrary execution path. Every run snapshots the current Git working tree—including tracked and untracked user changes—into its own independent clone, and Docker mounts only that clone. Nodes may select a validated repository-relative starting directory, an allowed model, explicit node references, and bounded text attachments.
+
+Once a binary-safe ChangeSet is created, the full clone is deleted immediately. Apply is serialized per repository and revalidates the source fingerprint. If a parallel run has an older baseline, its patch is replayed against a fresh snapshot and must be reviewed again under a new ChangeSet ID. Successful Apply stores forward patch and pre/post fingerprints for a seven-day one-click Undo; Undo refuses to touch a repository that changed afterward. Terminal run artifacts are pruned by age, count, and total-size quotas.
 
 **Done when:** a node can analyze a real repository and propose a change without silently applying protected operations.
 
@@ -204,11 +208,23 @@ The shared, versioned `A2UIBlock` union separates explanation UI from execution 
 
 **Done when:** ordinary explanations can become clearer without turning every answer into a visualization, while Agent Mode makes plans, execution, review, and protected actions visible. **Done for the current block set.**
 
-### Phase 5 — MCP tools and hardening
+### Phase 5A — LangGraph canvas assistant loop
 
-Add filesystem, GitHub, and browser/search connectors behind the same permission manager; then add audit, cancellation, checkpoints, and failure recovery.
+**Status: core implementation available.** The browser calls only `POST /api/assistant/turns`; the BFF resolves the Workspace Binding and proxies to a workspace-scoped LangGraph thread. LangGraph emits native `CanvasCommand` events and pauses with `interrupt()`. The frontend atomically executes safe commands, checks the canvas revision, records activity and transactions, resumes the graph with the real result, and requires confirmation for deletion.
 
-**Done when:** external tool calls are inspectable, policy-controlled, and confirmable or rejectable.
+**Done when:** multi-turn assistant memory survives panel close, real command receipts appear in the activity stream, mutations can be undone, and stale commands are rejected for replanning.
+
+### Phase 5B — Skills and read-only MCP
+
+**Status: initial implementation available.** Skill discovery merges repository `.meshcli/skills`, user `~/.meshcli/skills`, and built-ins in that priority order. Only activated Skill content is loaded, symlinks and traversal are rejected, scripts are never run, and the existing 500KB context budget applies. The Python service uses `langchain-mcp-adapters` with an allowlisted official filesystem server whose root comes only from the BFF-validated Workspace Binding.
+
+**Done when:** the assistant can inspect repository evidence through read-only MCP and organize findings on the canvas without changing repository files.
+
+### Phase 5C — Writable connectors and durable recovery
+
+Add writable MCP tools, GitHub/browser connectors, OAuth, a shared permission manager, durable audit records, checkpoints, and restart-safe recovery of pending interrupts. A service restart may currently expire an outstanding confirmation, which the user must reissue.
+
+**Done when:** external side effects are scoped, inspectable, explicitly confirmable, auditable, and recoverable.
 
 ## Demo scenario
 
@@ -232,11 +248,11 @@ src/                  React graph workspace
   types/              Frontend domain types
   utils/              Prompts, layout, and helpers
 apps/
-  agent/              Current Python LangGraph agent prototype
+  agent/              Python LangGraph assistant, canvas tools, Skills, and MCP registry
   bff/                Current Hono backend-for-frontend
-  mcp/                Reserved MCP integration area
+  mcp/                Reserved for additional MCP server packages
 packages/
-  protocol/           Shared, runtime-validated run and event contracts
+  protocol/           Shared runtime-validated run, A2UI, CanvasCommand, and assistant event contracts
 bin/                  CLI entry point
 ```
 

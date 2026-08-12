@@ -7,6 +7,7 @@ export interface WorkspaceMetadata {
   createdAt: number;
   updatedAt: number;
   description?: string;
+  defaultAgentModelId?: string;
 }
 
 export interface WorkspaceData {

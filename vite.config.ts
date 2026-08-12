@@ -18,11 +18,19 @@ export default defineConfig({
         target: process.env.BFF_URL ?? 'http://localhost:4000',
         changeOrigin: true,
       },
+      '/api/assistant': {
+        target: process.env.BFF_URL ?? 'http://localhost:4000',
+        changeOrigin: true,
+      },
       '/api/node-runs': {
         target: process.env.BFF_URL ?? 'http://localhost:4000',
         changeOrigin: true,
       },
       '/api/runs': {
+        target: process.env.BFF_URL ?? 'http://localhost:4000',
+        changeOrigin: true,
+      },
+      '/api/workspace-bindings': {
         target: process.env.BFF_URL ?? 'http://localhost:4000',
         changeOrigin: true,
       },

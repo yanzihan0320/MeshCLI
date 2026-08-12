@@ -50,7 +50,7 @@ export const ConfirmationBlockSchema = A2UIBlockBaseSchema.extend({
 export const DiffReviewBlockSchema = A2UIBlockBaseSchema.extend({
   type: z.literal('diff_review'),
   title: z.string().min(1).max(500),
-  status: z.enum(['pending', 'applied', 'rejected', 'conflicted']).default('pending'),
+  status: z.enum(['pending', 'applied', 'rejected', 'conflicted', 'reverted']).default('pending'),
   changeSet: ChangeSetSchema,
 });
 
@@ -164,7 +164,7 @@ export type A2UIBlockEventPayload = z.infer<typeof A2UIBlockEventPayloadSchema>;
 
 export function createChangeSetReviewBlocks(
   changeSet: ChangeSet,
-  status: 'pending' | 'applied' | 'rejected' | 'conflicted' = 'pending',
+  status: 'pending' | 'applied' | 'rejected' | 'conflicted' | 'reverted' = 'pending',
 ): A2UIBlock[] {
   const diffStatus = status;
   const confirmationStatus = status === 'applied'
@@ -173,6 +173,8 @@ export function createChangeSetReviewBlocks(
       ? 'rejected'
       : status === 'conflicted'
         ? 'expired'
+        : status === 'reverted'
+          ? 'expired'
         : 'pending';
   const fileLabel = changeSet.files.length === 1 ? '1 file' : `${changeSet.files.length} files`;
 

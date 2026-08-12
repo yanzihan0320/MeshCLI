@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { access, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
@@ -42,6 +42,7 @@ describe('WorkspaceManager', () => {
     const changeSet = await manager.createChangeSet('run-1');
     expect(changeSet.files.map((file) => file.path).sort()).toEqual(['new.txt', 'sample.txt']);
     expect(await readFile(join(root, 'sample.txt'), 'utf8')).toBe('before\n');
+    await expect(access(managed.workspacePath)).rejects.toThrow();
 
     await manager.apply('run-1');
     expect(await readFile(join(root, 'sample.txt'), 'utf8')).toBe('after\n');
@@ -67,7 +68,8 @@ describe('WorkspaceManager', () => {
     await manager.createChangeSet('run-3');
     await writeFile(join(root, 'sample.txt'), 'user\n', 'utf8');
 
-    await expect(manager.apply('run-3')).rejects.toThrow('changed after this Agent run started');
+    const result = await manager.apply('run-3');
+    expect(result.kind).toBe('conflict');
     expect(await readFile(join(root, 'sample.txt'), 'utf8')).toBe('user\n');
   });
 
@@ -86,5 +88,90 @@ describe('WorkspaceManager', () => {
 
     expect(await readFile(join(root, 'sample.txt'), 'utf8')).toBe('agent result\n');
     expect(await readFile(join(root, 'draft.txt'), 'utf8')).toBe('draft baseline\n');
+  });
+
+  it('reports renamed and binary files without misclassifying missing numstat entries', async () => {
+    const root = await fixtureRepo();
+    const manager = new WorkspaceManager(root);
+    const managed = await manager.prepare('run-file-kinds');
+    await rename(join(managed.workspacePath, 'sample.txt'), join(managed.workspacePath, 'renamed.txt'));
+    await writeFile(join(managed.workspacePath, 'asset.bin'), Buffer.from([0, 255, 1, 254]));
+
+    const changeSet = await manager.createChangeSet('run-file-kinds');
+    expect(changeSet.files).toEqual(expect.arrayContaining([
+      expect.objectContaining({ path: 'renamed.txt', status: 'renamed' }),
+      expect.objectContaining({ path: 'asset.bin', status: 'binary' }),
+    ]));
+  });
+
+  it('captures content changes even when the Agent commits inside the isolated clone', async () => {
+    const root = await fixtureRepo();
+    const manager = new WorkspaceManager(root);
+    const managed = await manager.prepare('run-agent-commit');
+    await writeFile(join(managed.workspacePath, 'sample.txt'), 'committed by agent\n', 'utf8');
+    await writeFile(join(managed.workspacePath, 'committed.txt'), 'new committed file\n', 'utf8');
+    await git(managed.workspacePath, 'add', '--all');
+    await git(managed.workspacePath, 'commit', '--quiet', '-m', 'agent commit');
+
+    const changeSet = await manager.createChangeSet('run-agent-commit');
+    expect(changeSet.files).toEqual(expect.arrayContaining([
+      expect.objectContaining({ path: 'sample.txt', status: 'modified', additions: 1, deletions: 1 }),
+      expect.objectContaining({ path: 'committed.txt', status: 'added', additions: 1, deletions: 0 }),
+    ]));
+    expect(changeSet.diff).toContain('+committed by agent');
+    expect(changeSet.diff).toContain('+new committed file');
+
+    const applied = await manager.apply('run-agent-commit');
+    expect(applied.kind).toBe('applied');
+    expect(await readFile(join(root, 'sample.txt'), 'utf8')).toBe('committed by agent\n');
+    expect(await readFile(join(root, 'committed.txt'), 'utf8')).toBe('new committed file\n');
+  });
+
+  it('undoes an applied patch while preserving the pre-apply dirty baseline', async () => {
+    const root = await fixtureRepo();
+    await writeFile(join(root, 'sample.txt'), 'user baseline\n', 'utf8');
+    const manager = new WorkspaceManager(root);
+    const managed = await manager.prepare('run-undo');
+    await writeFile(join(managed.workspacePath, 'sample.txt'), 'agent result\n', 'utf8');
+    await manager.createChangeSet('run-undo');
+
+    const applied = await manager.apply('run-undo');
+    expect(applied.kind).toBe('applied');
+    expect(await readFile(join(root, 'sample.txt'), 'utf8')).toBe('agent result\n');
+
+    const undone = await manager.undo('run-undo');
+    expect(undone.kind).toBe('reverted');
+    expect(await readFile(join(root, 'sample.txt'), 'utf8')).toBe('user baseline\n');
+  });
+
+  it('refuses undo after the source changes again', async () => {
+    const root = await fixtureRepo();
+    const manager = new WorkspaceManager(root);
+    const managed = await manager.prepare('run-undo-conflict');
+    await writeFile(join(managed.workspacePath, 'sample.txt'), 'agent result\n', 'utf8');
+    await manager.createChangeSet('run-undo-conflict');
+    await manager.apply('run-undo-conflict');
+    await writeFile(join(root, 'sample.txt'), 'later user change\n', 'utf8');
+
+    const result = await manager.undo('run-undo-conflict');
+    expect(result.kind).toBe('conflict');
+    expect(await readFile(join(root, 'sample.txt'), 'utf8')).toBe('later user change\n');
+  });
+
+  it('replays a parallel patch on the latest source and requires a new review', async () => {
+    const root = await fixtureRepo();
+    await writeFile(join(root, 'other.txt'), 'one\n', 'utf8');
+    await git(root, 'add', '.');
+    await git(root, 'commit', '--quiet', '-m', 'other fixture');
+    const manager = new WorkspaceManager(root);
+    const managed = await manager.prepare('run-replay');
+    await writeFile(join(managed.workspacePath, 'sample.txt'), 'agent\n', 'utf8');
+    const original = await manager.createChangeSet('run-replay');
+    await writeFile(join(root, 'other.txt'), 'two\n', 'utf8');
+
+    const result = await manager.apply('run-replay');
+    expect(result.kind).toBe('review_required');
+    if (result.kind === 'review_required') expect(result.changeSet.changeSetId).not.toBe(original.changeSetId);
+    expect(await readFile(join(root, 'sample.txt'), 'utf8')).toBe('before\n');
   });
 });

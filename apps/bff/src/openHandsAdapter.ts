@@ -2,15 +2,17 @@ import { execFile, spawn, type ChildProcessWithoutNullStreams } from 'node:child
 import { createInterface } from 'node:readline';
 import { resolve } from 'node:path';
 import { promisify } from 'node:util';
-import type { AgentRunRequest, ChangeSet } from '../../../packages/protocol/src/agent';
+import type { AgentEvent, AgentRunRequest, ChangeSet } from '../../../packages/protocol/src/agent';
 import { TaskBoardBlockSchema, createChangeSetReviewBlocks, type TaskBoardBlock } from '../../../packages/protocol/src/a2ui';
-import type { AdapterEvent, AgentAdapter, AgentRunContext } from './agentGateway';
+import type { AdapterEvent, AdapterReviewResult, AgentAdapter, AgentRunContext, RestoredAdapterRun } from './agentGateway';
 import { WorkspaceManager } from './workspaceManager';
+import { WorkspaceBindingRegistry, workspaceBindingRegistry } from './workspaceBindingRegistry';
 
 const EVENT_PREFIX = 'MESHCLI_EVENT ';
 const CONTROL_PREFIX = 'MESHCLI_CONTROL ';
 const MAX_STDERR_CHARS = 16_000;
 const execFileAsync = promisify(execFile);
+const MAX_AGENT_CONTEXT_BYTES = 500_000;
 
 interface RunnerEvent {
   type: AdapterEvent['type'];
@@ -76,12 +78,31 @@ export function planTaskBoard(runId: string, plan: unknown): TaskBoardBlock | un
 }
 
 export function formatAgentPrompt(input: AgentRunRequest): string {
+  const sections = [input.prompt];
+  if (input.context.topic) sections.push(`\n--- Current node: ${input.context.topic} ---`);
+  if (input.context.sourceText) sections.push(input.context.sourceText);
+  if (input.context.messages.length) {
+    sections.push('\n--- Current node conversation ---');
+    for (const message of input.context.messages) sections.push(`${message.role}: ${message.content}`);
+    sections.push('--- End current node conversation ---');
+  }
+  for (const reference of input.context.references ?? []) {
+    sections.push(`\n--- Referenced node: ${reference.title} (${reference.nodeId}) ---`);
+    sections.push(reference.content);
+    sections.push('--- End referenced node ---');
+  }
   const attachments = input.context.attachments ?? [];
-  if (!attachments.length) return input.prompt;
-  const references = attachments.map((attachment) => (
-    `\n--- Attached reference: ${attachment.name} (${attachment.mediaType ?? 'text/plain'}) ---\n${attachment.content}\n--- End attachment ---`
-  )).join('\n');
-  return `${input.prompt}\n\nUse the following user-attached files as read-only reference context.${references}`;
+  if (attachments.length) sections.push('\nUse the following user-attached files as read-only reference context.');
+  for (const attachment of attachments) {
+    sections.push(`\n--- Attached reference: ${attachment.name} (${attachment.mediaType ?? 'text/plain'}) ---`);
+    sections.push(attachment.content);
+    sections.push('--- End attachment ---');
+  }
+  const prompt = sections.join('\n');
+  if (Buffer.byteLength(prompt, 'utf8') > MAX_AGENT_CONTEXT_BYTES) {
+    throw new Error('Agent context exceeds the 500 KB limit. Remove attachments or referenced nodes.');
+  }
+  return prompt;
 }
 
 export class OpenHandsAdapter implements AgentAdapter {
@@ -89,7 +110,14 @@ export class OpenHandsAdapter implements AgentAdapter {
   private readonly processes = new Map<string, ChildProcessWithoutNullStreams>();
   private readonly containers = new Map<string, string>();
 
-  constructor(private readonly workspaces = new WorkspaceManager()) {}
+  private readonly ready: Promise<void>;
+
+  constructor(
+    private readonly workspaces = new WorkspaceManager(),
+    private readonly bindings: WorkspaceBindingRegistry = workspaceBindingRegistry,
+  ) {
+    this.ready = this.workspaces.initialize();
+  }
 
   async *run(
     input: AgentRunRequest,
@@ -100,7 +128,14 @@ export class OpenHandsAdapter implements AgentAdapter {
       type: 'run_started',
       payload: { adapter: this.name, message: `Preparing an isolated run for ${input.context.topic}` },
     };
-    const managed = await this.workspaces.prepare(context.runId, signal);
+    await this.ready;
+    const binding = await this.bindings.resolve(input.workspaceId);
+    const managed = await this.workspaces.create(context.runId, signal, {
+      nodeId: input.nodeId,
+      workspaceId: input.workspaceId,
+      sourceRoot: binding.sourceRoot,
+      workingDirectory: input.workingDirectory ?? binding.defaultWorkingDirectory,
+    });
     const child = this.spawnRunner(context.runId);
     const stderr: string[] = [];
     child.stderr.setEncoding('utf8');
@@ -118,6 +153,8 @@ export class OpenHandsAdapter implements AgentAdapter {
         ?? 'ghcr.io/openhands/agent-server:1.36.1-python',
       dockerHealthTimeout: Number(process.env.AGENT_DOCKER_HEALTH_TIMEOUT ?? 180),
       maxIterations: Number(process.env.AGENT_MAX_ITERATIONS ?? 60),
+      workingDirectory: managed.workingDirectory,
+      model: input.agentModelId || process.env.OPENAI_MODEL,
     }));
 
     const lines = createInterface({ input: child.stdout, crlfDelay: Infinity });
@@ -150,7 +187,7 @@ export class OpenHandsAdapter implements AgentAdapter {
       throw new Error(`OpenHands runtime failed: ${detail}`);
     }
 
-    const changeSet = await this.workspaces.createChangeSet(context.runId, signal);
+    const changeSet = await this.workspaces.diff(context.runId, signal);
     yield {
       type: 'change_set_created',
       payload: { changeSet },
@@ -171,8 +208,25 @@ export class OpenHandsAdapter implements AgentAdapter {
     };
   }
 
-  async apply(runId: string): Promise<{ changeSet: ChangeSet; event: AdapterEvent }> {
-    const changeSet = await this.workspaces.apply(runId);
+  async apply(runId: string): Promise<AdapterReviewResult> {
+    const result = await this.workspaces.apply(runId);
+    if (result.kind === 'conflict') {
+      return {
+        changeSet: result.changeSet,
+        event: { type: 'patch_conflict', payload: { error: result.error } },
+      };
+    }
+    if (result.kind === 'review_required') {
+      return {
+        changeSet: result.changeSet,
+        requiresReview: true,
+        event: {
+          type: 'change_set_rebased',
+          payload: { changeSet: result.changeSet, message: 'Patch replayed on the latest workspace.' },
+        },
+      };
+    }
+    const changeSet = result.changeSet;
     return {
       changeSet,
       event: {
@@ -180,9 +234,26 @@ export class OpenHandsAdapter implements AgentAdapter {
         payload: {
           changeSetId: changeSet.changeSetId,
           fileCount: changeSet.files.length,
+          undoExpiresAt: result.undoExpiresAt,
           message: changeSet.files.length ? 'Changes applied to the real project.' : 'No changes to apply.',
         },
       },
+    };
+  }
+
+  async undo(runId: string) {
+    const result = await this.workspaces.undo(runId);
+    return {
+      changeSet: result.changeSet,
+      event: result.kind === 'reverted'
+        ? {
+            type: 'patch_reverted' as const,
+            payload: { changeSetId: result.changeSet.changeSetId, message: 'Applied changes were undone.' },
+          }
+        : {
+            type: 'undo_conflict' as const,
+            payload: { changeSetId: result.changeSet.changeSetId, error: result.error },
+          },
     };
   }
 
@@ -218,6 +289,29 @@ export class OpenHandsAdapter implements AgentAdapter {
     if (child && !child.killed) child.kill('SIGTERM');
     this.processes.delete(runId);
     await this.workspaces.cancel(runId);
+  }
+
+  async fail(runId: string): Promise<void> {
+    await this.workspaces.fail(runId);
+  }
+
+  async restoreRun(runId: string): Promise<RestoredAdapterRun | undefined> {
+    await this.ready;
+    const managed = await this.workspaces.restore(runId);
+    if (!managed) return undefined;
+    return {
+      runId,
+      nodeId: managed.nodeId,
+      workspaceId: managed.workspaceId,
+      status: managed.status,
+      createdAt: managed.createdAt,
+      changeSet: managed.changeSet,
+      events: await this.workspaces.readEvents(runId),
+    };
+  }
+
+  async persistEvent(runId: string, event: AgentEvent): Promise<void> {
+    await this.workspaces.appendEvent(runId, event);
   }
 
   private spawnRunner(runId: string): ChildProcessWithoutNullStreams {

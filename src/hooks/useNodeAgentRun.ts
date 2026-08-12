@@ -19,6 +19,12 @@ export async function readAgentAttachments(files: File[]) {
   }));
 }
 
+export interface AgentRunOptions {
+  agentModelId?: string;
+  workingDirectory?: string;
+  referenceNodeIds?: string[];
+}
+
 export function useNodeAgentRun(nodeId: string, topic: string) {
   const [clientError, setClientError] = useState<string>();
   const [isReviewing, setIsReviewing] = useState(false);
@@ -33,24 +39,42 @@ export function useNodeAgentRun(nodeId: string, topic: string) {
 
   useEffect(() => () => streamControllerRef.current?.abort(), []);
 
-  const startRun = useCallback(async (prompt: string, files: File[] = []) => {
+  const startRun = useCallback(async (prompt: string, files: File[] = [], options: AgentRunOptions = {}) => {
     const workspaceId = useWorkspaceStore.getState().activeWorkspaceId;
     const trimmedPrompt = prompt.trim();
     if (!workspaceId || !trimmedPrompt || isRunning) return;
     setClientError(undefined);
     responseTextRef.current = '';
 
-    const messages = useChatStore.getState().getMessages(nodeId);
+    const chatState = useChatStore.getState();
+    const flowState = useFlowStore.getState();
+    const messages = chatState.getMessages(nodeId);
+    const currentNode = flowState.nodes.find((node) => node.id === nodeId);
+    const references = (options.referenceNodeIds ?? []).flatMap((referenceNodeId) => {
+      const node = flowState.nodes.find((candidate) => candidate.id === referenceNodeId);
+      if (!node || node.id === nodeId) return [];
+      const nodeMessages = chatState.getMessages(node.id);
+      return [{
+        nodeId: node.id,
+        title: node.data.topic || node.data.label || 'Untitled node',
+        content: [node.data.branchText, ...nodeMessages.map((message) => `${message.role}: ${message.content}`)]
+          .filter(Boolean).join('\n'),
+      }];
+    });
     try {
       const attachments = await readAgentAttachments(files);
       const created = await nodeRunClient.createRun({
         nodeId,
         workspaceId,
         prompt: trimmedPrompt,
+        workingDirectory: options.workingDirectory?.trim() || undefined,
+        agentModelId: options.agentModelId,
         context: {
           topic,
+          sourceText: currentNode?.data.branchText,
           messages: messages.map(({ role, content }) => ({ role, content })),
           attachments,
+          references,
         },
       });
       useFlowStore.getState().beginNodeRun(nodeId, created.runId);
@@ -109,9 +133,31 @@ export function useNodeAgentRun(nodeId: string, topic: string) {
     try {
       const event = await nodeRunClient.reviewRun(latestRun.runId, action, changeSetId);
       useFlowStore.getState().appendNodeRunEvent(nodeId, event);
+      if (event.type === 'review_ready') {
+        await nodeRunClient.streamEvents(latestRun.runId, (historicalEvent) => {
+          useFlowStore.getState().appendNodeRunEvent(nodeId, historicalEvent);
+        });
+      }
       if (event.type === 'patch_conflict') {
         setClientError(String(event.payload.error ?? 'Patch could not be applied.'));
       }
+    } catch (error) {
+      setClientError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setIsReviewing(false);
+    }
+  }, [isReviewing, latestRun, nodeId]);
+
+  const undoRun = useCallback(async (expectedChangeSetId?: string) => {
+    if (!latestRun || latestRun.status !== 'applied' || isReviewing) return;
+    const changeSetId = expectedChangeSetId ?? latestRun.changeSet?.changeSetId;
+    if (!changeSetId) return setClientError('This run has no applied change set to undo.');
+    setClientError(undefined);
+    setIsReviewing(true);
+    try {
+      const event = await nodeRunClient.undoRun(latestRun.runId, changeSetId);
+      useFlowStore.getState().appendNodeRunEvent(nodeId, event);
+      if (event.type === 'undo_conflict') setClientError(String(event.payload.error ?? 'Undo is no longer safe.'));
     } catch (error) {
       setClientError(error instanceof Error ? error.message : String(error));
     } finally {
@@ -128,5 +174,6 @@ export function useNodeAgentRun(nodeId: string, topic: string) {
     cancelRun,
     applyRun: (changeSetId?: string) => reviewRun('apply', changeSetId),
     rejectRun: (changeSetId?: string) => reviewRun('reject', changeSetId),
+    undoRun,
   };
 }

@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { X, Send, MessageSquare, Loader2, Copy, Check } from 'lucide-react';
+import { X, Send, MessageSquare, Loader2, Copy, Check, Wrench, Undo2, ShieldAlert } from 'lucide-react';
 import { useAgent } from '../../services/agent';
 
 interface CustomCopilotChatProps {
@@ -10,7 +10,7 @@ interface CustomCopilotChatProps {
 
 export function CustomCopilotChat({ isOpen, onClose }: CustomCopilotChatProps) {
   const { t } = useTranslation();
-  const { messages, isRunning, send, abort } = useAgent();
+  const { messages, activity, usedSkills, pendingCommand, isRunning, send, abort, decidePending, undo } = useAgent();
   const [input, setInput] = useState('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -78,7 +78,7 @@ export function CustomCopilotChat({ isOpen, onClose }: CustomCopilotChatProps) {
         ) : (
           messages.map((msg, index) => (
             <div
-              key={index}
+              key={msg.id}
               className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
             >
               <div
@@ -106,6 +106,45 @@ export function CustomCopilotChat({ isOpen, onClose }: CustomCopilotChatProps) {
               </div>
             </div>
           ))
+        )}
+
+        {activity.slice(-8).map((event) => (
+          event.type === 'tool_started' || event.type === 'tool_finished' || event.type.startsWith('mcp_') || event.type === 'canvas_command' || event.type === 'action_resolved' ? (
+            <div key={event.eventId} className="rounded-lg border border-border bg-surface-900 px-3 py-2 text-[11px] text-text-muted">
+              <div className="flex items-center gap-2">
+                <Wrench size={12} className="text-accent-400" />
+                <span>{event.type.replaceAll('_', ' ')}</span>
+                <span className="truncate">{String(event.payload.name ?? event.payload.tool ?? ((event.payload.command as { type?: string } | undefined)?.type) ?? event.payload.status ?? '')}</span>
+              </div>
+              {event.type === 'action_resolved' && event.payload.status === 'applied' && typeof event.payload.actionId === 'string' && (
+                <button
+                  onClick={() => undo(String(event.payload.actionId))}
+                  className="mt-1 inline-flex items-center gap-1 text-accent-400 hover:text-accent-300"
+                >
+                  <Undo2 size={11} /> Undo
+                </button>
+              )}
+            </div>
+          ) : null
+        ))}
+
+        {usedSkills.length > 0 && (
+          <div className="text-[11px] text-text-muted">Skills used: {usedSkills.join(', ')}</div>
+        )}
+
+        {pendingCommand && (
+          <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3">
+            <div className="flex items-center gap-2 text-amber-300 text-sm font-medium">
+              <ShieldAlert size={16} /> Confirmation required
+            </div>
+            <p className="mt-2 text-xs text-text-secondary">
+              {pendingCommand.type}: {JSON.stringify(pendingCommand.payload)}
+            </p>
+            <div className="mt-3 flex gap-2">
+              <button onClick={() => void decidePending(true)} className="rounded-md bg-amber-500 px-3 py-1.5 text-xs font-medium text-black">Approve</button>
+              <button onClick={() => void decidePending(false)} className="rounded-md border border-border px-3 py-1.5 text-xs text-text-secondary">Reject</button>
+            </div>
+          </div>
         )}
 
         {isRunning && (

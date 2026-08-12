@@ -21,14 +21,29 @@ export interface AgentRunContext {
 export interface AdapterReviewResult {
   changeSet: ChangeSet;
   event: AdapterEvent;
+  requiresReview?: boolean;
+}
+
+export interface RestoredAdapterRun {
+  runId: string;
+  nodeId: string;
+  workspaceId: string;
+  status: AgentRunStatus;
+  createdAt: number;
+  changeSet?: ChangeSet;
+  events: AgentEvent[];
 }
 
 export interface AgentAdapter {
   readonly name: string;
   run(input: AgentRunRequest, signal: AbortSignal, context: AgentRunContext): AsyncIterable<AdapterEvent>;
   apply?(runId: string): Promise<AdapterReviewResult>;
+  undo?(runId: string): Promise<AdapterReviewResult>;
   reject?(runId: string): Promise<AdapterReviewResult>;
   cancel?(runId: string): Promise<void>;
+  fail?(runId: string): Promise<void>;
+  restoreRun?(runId: string): Promise<RestoredAdapterRun | undefined>;
+  persistEvent?(runId: string, event: AgentEvent): Promise<void>;
 }
 
 const delay = (milliseconds: number, signal: AbortSignal) => new Promise<void>((resolve, reject) => {
@@ -128,13 +143,22 @@ export class AgentRunManager {
   }
 
   async apply(runId: string): Promise<AgentEvent | undefined> {
-    const run = this.runs.get(runId);
+    const run = await this.ensureRun(runId);
     if (!run || run.status !== 'review_ready' || !this.adapter.apply) return undefined;
     run.status = 'applying';
     try {
       const result = await this.adapter.apply(runId);
       run.changeSet = result.changeSet;
-      return this.append(run, result.event.type, result.event.payload);
+      const event = this.append(run, result.event.type, result.event.payload);
+      if (result.requiresReview) {
+        this.append(run, 'change_set_created', { changeSet: result.changeSet });
+        return this.append(run, 'review_ready', {
+          changeSetId: result.changeSet.changeSetId,
+          fileCount: result.changeSet.files.length,
+          message: 'The project changed. Review the replayed patch before applying it.',
+        });
+      }
+      return event;
     } catch (error) {
       return this.append(run, 'patch_conflict', {
         error: error instanceof Error ? error.message : String(error),
@@ -143,11 +167,23 @@ export class AgentRunManager {
   }
 
   async reject(runId: string): Promise<AgentEvent | undefined> {
-    const run = this.runs.get(runId);
+    const run = await this.ensureRun(runId);
     if (!run || run.status !== 'review_ready' || !this.adapter.reject) return undefined;
     const result = await this.adapter.reject(runId);
     run.changeSet = result.changeSet;
     return this.append(run, result.event.type, result.event.payload);
+  }
+
+  async undo(runId: string): Promise<AgentEvent | undefined> {
+    const run = await this.ensureRun(runId);
+    if (!run || run.status !== 'applied' || !this.adapter.undo) return undefined;
+    const result = await this.adapter.undo(runId);
+    run.changeSet = result.changeSet;
+    return this.append(run, result.event.type, result.event.payload);
+  }
+
+  async restore(runId: string): Promise<boolean> {
+    return Boolean(await this.ensureRun(runId));
   }
 
   private async execute(run: StoredRun, input: AgentRunRequest): Promise<void> {
@@ -158,6 +194,7 @@ export class AgentRunManager {
       }
     } catch (error) {
       if (!run.controller.signal.aborted) {
+        await this.adapter.fail?.(run.runId).catch(() => undefined);
         this.append(run, 'run_failed', {
           error: error instanceof Error ? error.message : String(error),
         });
@@ -171,6 +208,8 @@ export class AgentRunManager {
       'patch_applied',
       'patch_rejected',
       'patch_conflict',
+      'patch_reverted',
+      'undo_conflict',
       'run_failed',
       'run_cancelled',
     ];
@@ -194,13 +233,28 @@ export class AgentRunManager {
     }
     run.events.push(event);
     for (const subscriber of run.subscribers) subscriber(event);
+    void this.adapter.persistEvent?.(run.runId, event).catch(() => undefined);
     return event;
+  }
+
+  private async ensureRun(runId: string): Promise<StoredRun | undefined> {
+    const existing = this.runs.get(runId);
+    if (existing) return existing;
+    const restored = await this.adapter.restoreRun?.(runId);
+    if (!restored) return undefined;
+    const run: StoredRun = {
+      ...restored,
+      controller: new AbortController(),
+      subscribers: new Set(),
+    };
+    this.runs.set(runId, run);
+    return run;
   }
 
   private trimRetainedRuns(): void {
     if (this.runs.size <= MAX_RETAINED_RUNS) return;
     const terminalRuns = [...this.runs.values()]
-      .filter((run) => ['applied', 'rejected', 'conflicted', 'finished', 'failed', 'cancelled'].includes(run.status))
+      .filter((run) => ['applied', 'rejected', 'conflicted', 'reverted', 'finished', 'failed', 'cancelled'].includes(run.status))
       .sort((a, b) => a.createdAt - b.createdAt);
     for (const run of terminalRuns) {
       if (this.runs.size <= MAX_RETAINED_RUNS) break;

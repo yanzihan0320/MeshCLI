@@ -30,6 +30,17 @@ class ImmediateAdapter implements AgentAdapter {
   }
 }
 
+class ReplayAdapter extends ImmediateAdapter {
+  override async apply(runId: string) {
+    const changeSet = { ...emptyChangeSet, changeSetId: 'change-2', runId };
+    return {
+      changeSet,
+      event: { type: 'change_set_rebased' as const, payload: { changeSet } },
+      requiresReview: true,
+    };
+  }
+}
+
 describe('AgentRunManager', () => {
   it('normalizes adapter output into ordered node-bound events', async () => {
     const manager = new AgentRunManager(new ImmediateAdapter());
@@ -81,5 +92,21 @@ describe('AgentRunManager', () => {
     await expect(manager.cancel(created.runId)).resolves.toBe(true);
     expect(adapterCancelled).toBe(true);
     expect(manager.get(created.runId)?.events.at(-1)?.type).toBe('run_cancelled');
+  });
+
+  it('requires a second review after a parallel patch is replayed', async () => {
+    const manager = new AgentRunManager(new ReplayAdapter());
+    const created = manager.create({
+      nodeId: 'node-1', workspaceId: 'workspace-1', prompt: 'Analyze',
+      context: { topic: 'Topic', messages: [] },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const result = await manager.apply(created.runId);
+    expect(result?.type).toBe('review_ready');
+    expect(manager.get(created.runId)?.changeSet?.changeSetId).toBe('change-2');
+    expect(manager.get(created.runId)?.events.slice(-3).map((event) => event.type)).toEqual([
+      'change_set_rebased', 'change_set_created', 'review_ready',
+    ]);
   });
 });

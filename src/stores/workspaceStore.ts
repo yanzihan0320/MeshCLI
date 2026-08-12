@@ -9,6 +9,7 @@ interface WorkspaceState {
   switchWorkspace: (id: string) => void;
   renameWorkspace: (id: string, name: string) => void;
   deleteWorkspace: (id: string) => void;
+  setDefaultAgentModel: (id: string, modelId?: string) => void;
   getActiveWorkspace: () => WorkspaceMetadata | undefined;
 }
 
@@ -70,6 +71,14 @@ export const useWorkspaceStore = create<WorkspaceState>()(
               activeWorkspaceId === id ? remaining[0].id : activeWorkspaceId,
           });
         }
+      },
+
+      setDefaultAgentModel: (id: string, modelId?: string) => {
+        set({
+          workspaces: get().workspaces.map((workspace) => workspace.id === id
+            ? { ...workspace, defaultAgentModelId: modelId, updatedAt: Date.now() }
+            : workspace),
+        });
       },
 
       getActiveWorkspace: () => {
