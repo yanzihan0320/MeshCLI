@@ -5,6 +5,7 @@ import { readFile } from "node:fs/promises";
 import { join, extname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { exec } from "node:child_process";
+import { runCapabilityCommand } from "./capabilities.js";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const distDir = join(__dirname, "..", "dist");
@@ -96,7 +97,15 @@ async function start() {
   openBrowser(url);
 }
 
-start().catch((err) => {
-  console.error("Failed to start MeshCLI:", err.message);
-  process.exit(1);
+const handled = await runCapabilityCommand(process.argv.slice(2)).catch((err) => {
+  console.error(`MeshCLI: ${err.message}`);
+  process.exitCode = 1;
+  return true;
 });
+
+if (!handled) {
+  start().catch((err) => {
+    console.error("Failed to start MeshCLI:", err.message);
+    process.exit(1);
+  });
+}

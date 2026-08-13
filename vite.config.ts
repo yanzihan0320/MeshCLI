@@ -22,6 +22,10 @@ export default defineConfig({
         target: process.env.BFF_URL ?? 'http://localhost:4000',
         changeOrigin: true,
       },
+      '/api/capabilities': {
+        target: process.env.BFF_URL ?? 'http://localhost:4000',
+        changeOrigin: true,
+      },
       '/api/node-runs': {
         target: process.env.BFF_URL ?? 'http://localhost:4000',
         changeOrigin: true,

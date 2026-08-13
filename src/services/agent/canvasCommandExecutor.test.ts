@@ -3,7 +3,12 @@ import { useAssistantStore } from '../../stores/assistantStore';
 import { useChatStore } from '../../stores/chatStore';
 import { useFlowStore } from '../../stores/flowStore';
 import { useWorkspaceStore } from '../../stores/workspaceStore';
-import { executeCanvasCommand, undoCanvasCommand } from './canvasCommandExecutor';
+import {
+  executeCanvasCommand,
+  getCanvasUndoHistory,
+  undoAllCanvasCommands,
+  undoCanvasCommand,
+} from './canvasCommandExecutor';
 
 const workspaceId = 'executor-workspace';
 
@@ -39,5 +44,43 @@ describe('CanvasCommandExecutor', () => {
     });
     expect(result.status).toBe('stale');
     expect(useFlowStore.getState().nodes).toHaveLength(0);
+  });
+
+  it('creates multiple nodes in one revision and undoes the whole batch', () => {
+    const applied = executeCanvasCommand({
+      version: 1, actionId: 'batch-1', workspaceId, expectedRevision: 0, risk: 'write',
+      type: 'create_nodes',
+      payload: { nodes: [
+        { topic: 'Direction A', assistantMessage: 'A evidence' },
+        { topic: 'Direction B', assistantMessage: 'B evidence' },
+        { topic: 'Risk A', assistantMessage: 'Risk evidence' },
+      ] },
+    });
+    expect(applied.status).toBe('applied');
+    expect(applied.revision).toBe(1);
+    expect(applied.affectedNodeIds).toHaveLength(3);
+    expect(useFlowStore.getState().nodes).toHaveLength(3);
+    expect(undoCanvasCommand(workspaceId, 'batch-1')).toBe(true);
+    expect(useFlowStore.getState().nodes).toHaveLength(0);
+  });
+
+  it('keeps a multi-level history and can undo every assistant transaction', () => {
+    const first = executeCanvasCommand({
+      version: 1, actionId: 'history-1', workspaceId, expectedRevision: 0, risk: 'write',
+      type: 'create_node', payload: { topic: 'First direction' },
+    });
+    const second = executeCanvasCommand({
+      version: 1, actionId: 'history-2', workspaceId, expectedRevision: 1, risk: 'write',
+      type: 'create_nodes', payload: { nodes: [{ topic: 'Second direction' }, { topic: 'Third direction' }] },
+    });
+    expect(first.status).toBe('applied');
+    expect(second.status).toBe('applied');
+    expect(getCanvasUndoHistory(workspaceId).map((entry) => entry.actionId)).toEqual(['history-1', 'history-2']);
+    expect(useFlowStore.getState().nodes).toHaveLength(3);
+
+    expect(undoAllCanvasCommands(workspaceId)).toBe(2);
+    expect(useFlowStore.getState().nodes).toHaveLength(0);
+    expect(useChatStore.getState().conversations).toEqual({});
+    expect(getCanvasUndoHistory(workspaceId)).toEqual([]);
   });
 });

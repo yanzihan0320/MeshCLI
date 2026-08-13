@@ -216,7 +216,11 @@ The shared, versioned `A2UIBlock` union separates explanation UI from execution 
 
 ### Phase 5B — Skills and read-only MCP
 
-**Status: initial implementation available.** Skill discovery merges repository `.meshcli/skills`, user `~/.meshcli/skills`, and built-ins in that priority order. Only activated Skill content is loaded, symlinks and traversal are rejected, scripts are never run, and the existing 500KB context budget applies. The Python service uses `langchain-mcp-adapters` with an allowlisted official filesystem server whose root comes only from the BFF-validated Workspace Binding.
+**Status: core management and runtime implementation available.** Skill discovery merges repository `.meshcli/skills`, user `~/.meshcli/skills`, and built-ins in that priority order. The Settings panel shows source, validation errors, enablement, overrides, and actual assistant/node-Agent usage. The `meshcli skill` CLI validates, installs, enables, disables, and removes local or Git-hosted Skills. Only activated Skill content is loaded, symlinks and traversal are rejected, scripts are never run, and bounded context budgets apply.
+
+MeshCLI is the MCP Host rather than a universal proxy server. The `meshcli mcp` CLI maintains multiple focused stdio or Streamable HTTP registrations in the local capability registry; the Settings panel exposes only sanitized status, allowed tools, enablement, and connection tests. Commands, URLs, headers, roots, and secrets are never returned to the browser. The Python service uses `langchain-mcp-adapters`; only registrations explicitly marked read-only with a tool allowlist are exposed to Agents. The built-in official filesystem MCP remains rooted exclusively in the BFF-validated Workspace Binding.
+
+Node Agent Mode now runs through a `node-supervisor` LangGraph first. The graph activates the same Skills, can collect evidence with allowed read-only MCP tools, and produces a bounded execution brief. OpenHands remains the isolated code worker, and all resulting changes still pass through the existing Diff/Apply/Undo Gateway.
 
 **Done when:** the assistant can inspect repository evidence through read-only MCP and organize findings on the canvas without changing repository files.
 
@@ -225,6 +229,22 @@ The shared, versioned `A2UIBlock` union separates explanation UI from execution 
 Add writable MCP tools, GitHub/browser connectors, OAuth, a shared permission manager, durable audit records, checkpoints, and restart-safe recovery of pending interrupts. A service restart may currently expire an outstanding confirmation, which the user must reissue.
 
 **Done when:** external side effects are scoped, inspectable, explicitly confirmable, auditable, and recoverable.
+
+### Capability CLI examples
+
+```bash
+meshcli skill validate ./my-skill
+meshcli skill add ./my-skill --scope workspace --workspace .
+meshcli skill add https://github.com/example/agent-skills.git --skill skills/code-review
+meshcli skill list
+
+meshcli mcp add docs --transport streamable-http --url https://example.com/mcp --read-only --allow-tools search_docs,read_doc
+meshcli mcp add local-tool --transport stdio --read-only --allow-tools search -- python ./server.py
+meshcli mcp list
+meshcli mcp test workspace-filesystem --workspace-root .
+```
+
+Remote credentials are referenced by environment-variable name rather than stored in browser state. For example, add repeated `--header-env "Authorization=DOCS_AUTHORIZATION"` arguments and set that environment variable before starting the BFF and Agent service.
 
 ## Demo scenario
 

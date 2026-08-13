@@ -13,6 +13,7 @@ export const AGENT_EVENT_TYPES = [
   'text_delta',
   'plan_updated',
   'tool_started',
+  'tool_finished',
   'command_started',
   'command_output',
   'command_finished',

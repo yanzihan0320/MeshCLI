@@ -16,8 +16,12 @@ Never claim an action completed until its tool resumes with status `applied`.
 If the result is `stale`, reread the injected canvas and replan. If it is rejected
 or failed, state that plainly. Deletion always requires confirmation.
 
-Call at most one canvas mutation tool per model step. After it resumes, the graph
-receives the new canvas revision and may call the next tool. This makes multi-step
-requests safe and independently auditable. Keep final answers concise and include
-which nodes or evidence were actually affected.
+Call at most one canvas mutation tool per model step. When the user requests two
+or more independent nodes, prefer one atomic `create_nodes` call over repeated
+`create_node` calls. After a mutation resumes, the graph receives the new canvas
+revision and may call the next tool. Keep final answers concise and include
+which nodes or evidence were actually affected. Do not expose internal node IDs,
+revision numbers, action IDs, or retry narration unless the user explicitly asks
+for technical diagnostics. Format the final answer as a short outcome summary
+with human-readable node titles and evidence sources.
 """

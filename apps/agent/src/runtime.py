@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import json
 import os
+import re
+import threading
+import time
 from typing import Any
 
 from langgraph.graph.message import add_messages
@@ -17,6 +20,8 @@ class AssistantState(TypedDict, total=False):
     canvas: dict[str, Any]
     activated_skills: list[dict[str, Any]]
     prepared_context: str
+    execution_request: dict[str, Any]
+    mcp_catalog: list[dict[str, Any]]
 
 
 NOOP_FALLBACK_MESSAGE = (
@@ -24,11 +29,51 @@ NOOP_FALLBACK_MESSAGE = (
     "to enable the MeshCLI workspace assistant."
 )
 
+_MODEL_INVOKE_LOCK = threading.Lock()
+_last_model_invoke_at = 0.0
+
+
+def _model_min_interval_seconds() -> float:
+    explicit = os.getenv("LANGGRAPH_MODEL_MIN_INTERVAL_SECONDS")
+    if explicit is not None and explicit.strip():
+        return max(0.0, float(explicit))
+    endpoint = os.getenv("OPENAI_BASE_URL", "").lower()
+    model = os.getenv("OPENAI_MODEL", "").lower()
+    # Moonshot development accounts commonly allow only 3 requests/minute.
+    return 20.5 if "moonshot" in endpoint or "kimi" in model else 0.0
+
+
+def _invoke_with_rate_limit(model: Any, messages: list[Any]) -> Any:
+    global _last_model_invoke_at
+    with _MODEL_INVOKE_LOCK:
+        interval = _model_min_interval_seconds()
+        remaining = interval - (time.monotonic() - _last_model_invoke_at)
+        if remaining > 0:
+            time.sleep(remaining)
+        for attempt in range(4):
+            try:
+                response = model.invoke(messages)
+                _last_model_invoke_at = time.monotonic()
+                return response
+            except Exception as error:
+                detail = str(error)
+                if "429" not in detail and "rate_limit" not in detail.lower():
+                    raise
+                if attempt == 3:
+                    raise
+                match = re.search(r"after\s+(\d+(?:\.\d+)?)\s+seconds?", detail, re.IGNORECASE)
+                delay = float(match.group(1)) if match else min(8.0, 2.0 ** attempt)
+                time.sleep(max(1.0, delay) + 0.25)
+
 
 def _get_llm():
     if os.getenv("OPENAI_API_KEY"):
         from langchain_openai import ChatOpenAI
-        return ChatOpenAI(model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"), temperature=0)
+        # Some OpenAI-compatible models (for example Kimi K3) reject any
+        # temperature other than 1. Omitting the optional parameter lets each
+        # provider apply its supported default instead of forcing OpenAI's
+        # commonly used deterministic value onto every compatible endpoint.
+        return ChatOpenAI(model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"))
     if os.getenv("ANTHROPIC_API_KEY"):
         from langchain_anthropic import ChatAnthropic
         return ChatAnthropic(model=os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-20250514"), temperature=0)
@@ -48,6 +93,12 @@ def build_graph(runtime: str, *, tools: list, system_prompt: str):
 
     all_tools = tools
 
+    def tool_error_message(error: Exception) -> str:
+        return (
+            f"Tool failed with {type(error).__name__}: {error}. "
+            "Correct the tool arguments and retry; use '.' or '/' for the workspace root."
+        )
+
     def prepare_context(state: AssistantState) -> dict[str, Any]:
         skills = state.get("activated_skills", [])
         writer = get_stream_writer()
@@ -55,7 +106,14 @@ def build_graph(runtime: str, *, tools: list, system_prompt: str):
             writer({"type": "skill_activated", "payload": {"name": skill.get("name"), "source": skill.get("source")}})
         skill_text = "\n\n".join(skill.get("content", "") for skill in skills)
         canvas = json.dumps(state.get("canvas", {}), ensure_ascii=False)
-        return {"prepared_context": f"CURRENT CANVAS SNAPSHOT:\n{canvas}\n\nACTIVATED SKILLS:\n{skill_text}"}
+        execution = json.dumps(state.get("execution_request", {}), ensure_ascii=False)
+        mcp_catalog = json.dumps(state.get("mcp_catalog", []), ensure_ascii=False)
+        return {"prepared_context": (
+            f"CURRENT CANVAS SNAPSHOT:\n{canvas}\n\n"
+            f"NODE EXECUTION REQUEST:\n{execution}\n\n"
+            f"AVAILABLE MCP SERVERS:\n{mcp_catalog}\n\n"
+            f"ACTIVATED SKILLS:\n{skill_text}"
+        )}
 
     if runtime == "noop":
         def respond(_state: AssistantState) -> dict[str, Any]:
@@ -71,14 +129,21 @@ def build_graph(runtime: str, *, tools: list, system_prompt: str):
     model = _get_llm().bind_tools(all_tools)
 
     def call_agent(state: AssistantState) -> dict[str, Any]:
-        system = SystemMessage(content=f"{system_prompt}\n\n{state.get('prepared_context', '')}")
-        response = model.invoke([system, *state.get("messages", [])])
+        # Canvas tools update state after every interrupt/resume. Re-inject the
+        # latest snapshot on every model step rather than relying only on the
+        # turn-start prepared context, which may contain an older revision.
+        latest_canvas = json.dumps(state.get("canvas", {}), ensure_ascii=False)
+        system = SystemMessage(content=(
+            f"{system_prompt}\n\n{state.get('prepared_context', '')}\n\n"
+            f"LATEST CANVAS SNAPSHOT (supersedes earlier snapshot):\n{latest_canvas}"
+        ))
+        response = _invoke_with_rate_limit(model, [system, *state.get("messages", [])])
         return {"messages": [response]}
 
     graph = StateGraph(AssistantState)
     graph.add_node("prepare_context", prepare_context)
     graph.add_node("agent", call_agent)
-    graph.add_node("tools", ToolNode(all_tools))
+    graph.add_node("tools", ToolNode(all_tools, handle_tool_errors=tool_error_message))
     graph.add_edge(START, "prepare_context")
     graph.add_edge("prepare_context", "agent")
     graph.add_conditional_edges("agent", tools_condition, {"tools": "tools", "__end__": END})

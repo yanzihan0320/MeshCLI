@@ -35,8 +35,16 @@ The frontend proxies `/api/llm` to this service during local development.
 - `POST /api/assistant/actions/:actionId/resolve` resumes an interrupted canvas action with the real frontend result.
 - `GET /api/assistant/skills?workspaceId=...` lists the merged Skill catalog without exposing local paths.
 - `GET /api/assistant/mcp/status` reports the server-side MCP registry without commands, roots, or secrets.
+- `GET /api/capabilities/skills?workspaceId=...` returns the sanitized Skill catalog and actual usage history.
+- `PATCH /api/capabilities/skills/:name` enables or disables the effective Skill for a Workspace.
+- `POST /api/capabilities/skills/validate` validates an uploaded `SKILL.md` without installing it.
+- `POST /api/capabilities/skills/install` installs a bounded, script-free UI bundle into user or Workspace scope.
+- `DELETE /api/capabilities/skills/:name?workspaceId=...` removes a non-built-in Skill.
+- `GET /api/capabilities/mcp?workspaceId=...` returns sanitized multi-server status and allowlisted tool names.
+- `PATCH /api/capabilities/mcp/:id` enables or disables an existing trusted CLI registration.
+- `POST /api/capabilities/mcp/:id/test` probes an existing registration without accepting a browser command or root.
 - `POST /api/agent` is retired and returns `410 Gone`.
-- `POST /api/node-runs` creates a node-bound OpenHands execution run.
+- `POST /api/node-runs` creates a node-bound LangGraph-supervised OpenHands execution run.
 - `GET /api/runs/:runId/events` replays and streams normalized run events over SSE.
 - `POST /api/runs/:runId/cancel` cancels an active run.
 - `POST /api/runs/:runId/apply` validates and applies the run's patch.

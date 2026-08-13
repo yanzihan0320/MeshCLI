@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { z } from 'zod';
 import { serve } from '@hono/node-server';
 import { cors } from 'hono/cors';
 import { publicLLMConfig, resolveLLMConfig } from './llmConfig';
@@ -13,11 +14,16 @@ import { workspaceBindingRegistry } from './workspaceBindingRegistry';
 import { AssistantActionResolveSchema, AssistantTurnRequestSchema } from '../../../packages/protocol/src/assistant';
 import { assistantGateway } from './assistantGateway';
 import { skillRegistry } from './skillRegistry';
+import { mcpCapabilityRegistry } from './mcpCapabilityRegistry';
+import { SupervisedAgentAdapter } from './supervisedAgentAdapter';
 
 const app = new Hono();
-const configuredAdapter = (process.env.AGENT_ADAPTER ?? 'openhands') === 'mock'
+const executionAdapter = (process.env.AGENT_ADAPTER ?? 'openhands') === 'mock'
   ? new MockAgentAdapter()
   : new OpenHandsAdapter();
+const configuredAdapter = process.env.AGENT_LANGGRAPH_SUPERVISOR === 'false'
+  ? executionAdapter
+  : new SupervisedAgentAdapter(executionAdapter);
 const agentRuns = new AgentRunManager(configuredAdapter);
 
 app.use(
@@ -58,6 +64,19 @@ function errorMessage(error: unknown) {
     return `${error.message} (${String((cause as { code?: unknown }).code)})`;
   }
   return error.message;
+}
+
+function publicSkill(skill: Awaited<ReturnType<typeof skillRegistry.list>>[number]) {
+  return {
+    name: skill.name,
+    description: skill.description,
+    source: skill.source,
+    enabled: skill.enabled,
+    error: skill.error,
+    overriddenBy: skill.overriddenBy,
+    shadows: skill.shadows,
+    lastActivatedAt: skill.lastActivatedAt,
+  };
 }
 
 app.get('/api/llm/config', (c) => {
@@ -234,6 +253,102 @@ app.post('/api/llm', async (c) => {
 
 app.post('/api/agent', (c) => c.json({ error: 'Use /api/assistant/turns. The direct-model assistant route has been retired.' }, 410));
 
+const SkillToggleSchema = z.object({
+  workspaceId: z.string().min(1),
+  enabled: z.boolean(),
+});
+const SkillValidateSchema = z.object({ skillMd: z.string().min(1).max(500 * 1024) });
+const SkillInstallSchema = z.object({
+  workspaceId: z.string().min(1),
+  scope: z.enum(['global', 'workspace']),
+  overwrite: z.boolean().default(false),
+  files: z.array(z.object({ path: z.string().min(1).max(300), content: z.string().max(500 * 1024) })).min(1).max(100),
+});
+const MCPToggleSchema = z.object({ enabled: z.boolean() });
+
+app.get('/api/capabilities/skills', async (c) => {
+  const workspaceId = c.req.query('workspaceId');
+  if (!workspaceId) return c.json({ error: 'workspaceId is required.' }, 400);
+  try {
+    return c.json({ skills: (await skillRegistry.list(workspaceId)).map(publicSkill), usage: await skillRegistry.usage(workspaceId) });
+  } catch (error) {
+    return c.json({ error: errorMessage(error) }, 400);
+  }
+});
+
+app.patch('/api/capabilities/skills/:name', async (c) => {
+  const parsed = SkillToggleSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) return c.json({ error: 'workspaceId and enabled are required.' }, 400);
+  try {
+    return c.json({ skill: publicSkill(await skillRegistry.setEnabled(parsed.data.workspaceId, c.req.param('name'), parsed.data.enabled)) });
+  } catch (error) {
+    return c.json({ error: errorMessage(error) }, 400);
+  }
+});
+
+app.post('/api/capabilities/skills/validate', async (c) => {
+  const parsed = SkillValidateSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) return c.json({ valid: false, error: 'skillMd is required and must be at most 500KB.' }, 400);
+  try {
+    return c.json({ valid: true, skill: skillRegistry.validate(parsed.data.skillMd) });
+  } catch (error) {
+    return c.json({ valid: false, error: errorMessage(error) }, 400);
+  }
+});
+
+app.post('/api/capabilities/skills/install', async (c) => {
+  const parsed = SkillInstallSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) return c.json({ error: 'Invalid Skill bundle.', issues: parsed.error.issues }, 400);
+  try {
+    return c.json({ skill: publicSkill(await skillRegistry.install(
+      parsed.data.workspaceId,
+      parsed.data.scope,
+      parsed.data.files,
+      parsed.data.overwrite,
+    )) }, 201);
+  } catch (error) {
+    return c.json({ error: errorMessage(error) }, 400);
+  }
+});
+
+app.delete('/api/capabilities/skills/:name', async (c) => {
+  const workspaceId = c.req.query('workspaceId');
+  if (!workspaceId) return c.json({ error: 'workspaceId is required.' }, 400);
+  try {
+    await skillRegistry.remove(workspaceId, c.req.param('name'));
+    return c.json({ removed: true });
+  } catch (error) {
+    return c.json({ error: errorMessage(error) }, 400);
+  }
+});
+
+app.get('/api/capabilities/mcp', async (c) => {
+  try {
+    return c.json({ servers: await mcpCapabilityRegistry.list(c.req.query('workspaceId')) });
+  } catch (error) {
+    return c.json({ error: errorMessage(error) }, 400);
+  }
+});
+
+app.patch('/api/capabilities/mcp/:id', async (c) => {
+  const parsed = MCPToggleSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) return c.json({ error: 'enabled is required.' }, 400);
+  try {
+    return c.json({ server: await mcpCapabilityRegistry.setEnabled(c.req.param('id'), parsed.data.enabled) });
+  } catch (error) {
+    return c.json({ error: errorMessage(error) }, 400);
+  }
+});
+
+app.post('/api/capabilities/mcp/:id/test', async (c) => {
+  const body = await c.req.json<{ workspaceId?: string }>().catch(() => ({}));
+  try {
+    return c.json(await mcpCapabilityRegistry.test(c.req.param('id'), body.workspaceId));
+  } catch (error) {
+    return c.json({ success: false, error: errorMessage(error), tools: [] }, 400);
+  }
+});
+
 app.get('/api/assistant/skills', async (c) => {
   const workspaceId = c.req.query('workspaceId');
   if (!workspaceId) return c.json({ error: 'workspaceId is required.' }, 400);
@@ -251,18 +366,8 @@ app.get('/api/assistant/skills', async (c) => {
   }
 });
 
-app.get('/api/assistant/mcp/status', () => {
-  const enabled = process.env.MESHCLI_FILESYSTEM_MCP_ENABLED !== 'false';
-  return Response.json({
-    servers: [{
-      id: 'workspace-filesystem',
-      transport: 'stdio',
-      enabled,
-      status: enabled ? 'configured' : 'disabled',
-      tools: enabled ? ['read_text_file', 'read_multiple_files', 'list_directory', 'directory_tree', 'search_files', 'get_file_info'] : [],
-      readOnly: true,
-    }],
-  });
+app.get('/api/assistant/mcp/status', async (c) => {
+  return c.json({ servers: await mcpCapabilityRegistry.list(c.req.query('workspaceId')) });
 });
 
 app.post('/api/assistant/turns', async (c) => {
@@ -271,8 +376,11 @@ app.post('/api/assistant/turns', async (c) => {
   if (parsed.data.canvas.workspaceId !== parsed.data.workspaceId) return c.json({ error: 'Canvas workspace does not match the assistant workspace.' }, 409);
   try {
     const binding = await workspaceBindingRegistry.resolve(parsed.data.workspaceId).catch(() => undefined);
-    const activatedSkills = await skillRegistry.activate(parsed.data.workspaceId, parsed.data.message);
-    return await assistantGateway.start({ ...parsed.data, workspaceRoot: binding?.sourceRoot ?? '', activatedSkills }, c.req.raw.signal);
+    const [activatedSkills, mcpCatalog] = await Promise.all([
+      skillRegistry.activate(parsed.data.workspaceId, parsed.data.message, 'assistant'),
+      mcpCapabilityRegistry.list(parsed.data.workspaceId),
+    ]);
+    return await assistantGateway.start({ ...parsed.data, workspaceRoot: binding?.sourceRoot ?? '', activatedSkills, mcpCatalog }, c.req.raw.signal);
   } catch (error) {
     return c.json({ error: errorMessage(error) }, 502);
   }
@@ -355,7 +463,7 @@ app.post('/api/runs/:runId/cancel', async (c) => {
   if (!agentRuns.get(c.req.param('runId'))) return c.json({ error: 'Run not found' }, 404);
   const cancelled = await agentRuns.cancel(c.req.param('runId'));
   if (!cancelled) return c.json({ error: 'Run is already complete' }, 409);
-  return c.json({ status: 'cancelled' });
+  return c.json(cancelled);
 });
 
 app.post('/api/runs/:runId/apply', async (c) => {

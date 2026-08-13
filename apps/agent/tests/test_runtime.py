@@ -20,10 +20,14 @@ class TestBuildGraph:
             "workspace_root": ".",
             "canvas": {"version": 1, "revision": 2, "nodes": [], "edges": []},
             "activated_skills": [],
+            "execution_request": {"nodeId": "node-1"},
+            "mcp_catalog": [{"id": "workspace-filesystem"}],
         })
         assert isinstance(output["messages"][-1], AIMessage)
         assert output["messages"][-1].content == NOOP_FALLBACK_MESSAGE
         assert "CURRENT CANVAS SNAPSHOT" in output["prepared_context"]
+        assert "NODE EXECUTION REQUEST" in output["prepared_context"]
+        assert "AVAILABLE MCP SERVERS" in output["prepared_context"]
 
 
 class TestGetLlm:
@@ -34,6 +38,7 @@ class TestGetLlm:
         with patch("langchain_openai.ChatOpenAI", autospec=True) as cls:
             result = _get_llm()
         assert result is cls.return_value
+        assert "temperature" not in cls.call_args.kwargs
     def test_anthropic_key_returns_chatanthropic(self, monkeypatch):
         monkeypatch.delenv("OPENAI_API_KEY", raising=False)
         monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")

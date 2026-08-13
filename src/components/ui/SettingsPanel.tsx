@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { listProviders } from '../../services/providers/registry';
 import { fetchModels, fetchServerConfig, testConnection, type ServerLLMConfig } from '../../services/providers/api';
+import { MCPSettings, SkillsSettings } from './CapabilitySettings';
 
 export function SettingsPanel() {
   const { t } = useTranslation();
@@ -28,6 +29,7 @@ export function SettingsPanel() {
   const [serverConfigError, setServerConfigError] = useState('');
   const [assistantServerConfig, setAssistantServerConfig] = useState<ServerLLMConfig | null>(null);
   const [assistantConfigError, setAssistantConfigError] = useState('');
+  const [activeSection, setActiveSection] = useState<'general' | 'skills' | 'mcp'>('general');
   const resolvedAssistantProviderId = assistantProviderId === 'same'
     ? config.providerId
     : assistantProviderId;
@@ -142,7 +144,21 @@ export function SettingsPanel() {
         </button>
       </div>
 
+      <div className="grid grid-cols-3 gap-1 border-b border-border bg-surface-900 px-3 py-2">
+        {(['general', 'skills', 'mcp'] as const).map((section) => (
+          <button
+            type="button"
+            key={section}
+            onClick={() => setActiveSection(section)}
+            className={`rounded-lg px-2 py-1.5 text-[11px] font-medium transition-colors ${activeSection === section ? 'bg-accent-500/15 text-accent-300' : 'text-text-muted hover:bg-surface-800 hover:text-text-primary'}`}
+          >
+            {t(`settings.section${section.charAt(0).toUpperCase()}${section.slice(1)}`)}
+          </button>
+        ))}
+      </div>
+
       <div className="flex-1 overflow-y-auto p-4 space-y-5">
+        {activeSection === 'general' && <>
         {/* Theme Section */}
         <div className="border-b border-border pb-4">
           <h3 className="text-xs font-semibold text-text-secondary mb-3">{t('settings.theme')}</h3>
@@ -401,6 +417,9 @@ export function SettingsPanel() {
             <option value="zh">中文</option>
           </select>
         </div>
+        </>}
+        {activeSection === 'skills' && <SkillsSettings />}
+        {activeSection === 'mcp' && <MCPSettings />}
       </div>
 
       <div className="px-4 py-3 border-t border-border">

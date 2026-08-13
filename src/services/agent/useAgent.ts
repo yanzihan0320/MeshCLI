@@ -1,7 +1,13 @@
 import { useCallback, useEffect } from 'react';
 import { useReactFlow } from '@xyflow/react';
 import { agentClient } from './client';
-import { buildCanvasSnapshot, executeCanvasCommand, undoCanvasCommand } from './canvasCommandExecutor';
+import {
+  buildCanvasSnapshot,
+  executeCanvasCommand,
+  getCanvasUndoHistory,
+  undoAllCanvasCommands,
+  undoCanvasCommand,
+} from './canvasCommandExecutor';
 import { CanvasCommandSchema, type CanvasCommandResult, type WorkspaceAssistantEvent } from '../../../packages/protocol/src/assistant';
 import { useAssistantStore } from '../../stores/assistantStore';
 import { useSettingsStore } from '../../stores/settingsStore';
@@ -57,6 +63,10 @@ export function useAgent() {
           id: crypto.randomUUID(), role: 'assistant', timestamp: Date.now(),
           content: `Error: ${String(event.payload.error ?? 'Assistant turn failed.')}`,
         });
+        // A failed LangGraph checkpoint may contain an unresolved tool call.
+        // Preserve visible chat history, but continue the next turn on a fresh
+        // server thread so the broken checkpoint is never reused.
+        store.rotateThread(event.workspaceId, event.threadId);
       }
     }
   // resolve is stable over one active workspace and intentionally invoked after events.
@@ -94,6 +104,7 @@ export function useAgent() {
   const send = useCallback(async (message: string) => {
     if (!activeWorkspaceId) return;
     const state = useAssistantStore.getState().ensureWorkspace(activeWorkspaceId);
+    if (state.running) return;
     useAssistantStore.getState().appendMessage(activeWorkspaceId, {
       id: crypto.randomUUID(), role: 'user', content: message, timestamp: Date.now(),
     });
@@ -102,7 +113,9 @@ export function useAgent() {
       workspaceId: activeWorkspaceId,
       threadId: state.threadId,
       message,
-      history: state.messages.map(({ role, content }) => ({ role, content })),
+      history: state.messages
+        .slice(state.historyStartIndex ?? 0)
+        .map(({ role, content }) => ({ role, content })),
       canvas: buildCanvasSnapshot(activeWorkspaceId),
     }, resolvedProviderId, (event) => { void handleEvent(event); });
   }, [activeWorkspaceId, handleEvent, resolvedProviderId]);
@@ -133,6 +146,8 @@ export function useAgent() {
     send,
     abort,
     decidePending,
-    undo: (actionId?: string) => activeWorkspaceId ? undoCanvasCommand(activeWorkspaceId, actionId) : false,
+    undoHistory: activeWorkspaceId ? getCanvasUndoHistory(activeWorkspaceId) : [],
+    undo: () => activeWorkspaceId ? undoCanvasCommand(activeWorkspaceId) : false,
+    undoAll: () => activeWorkspaceId ? undoAllCanvasCommands(activeWorkspaceId) : 0,
   };
 }

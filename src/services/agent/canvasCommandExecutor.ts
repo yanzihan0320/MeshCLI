@@ -17,6 +17,7 @@ import { useWorkspaceStore } from '../../stores/workspaceStore';
 
 interface CanvasTransaction {
   actionId: string;
+  commandType: CanvasCommand['type'];
   workspaceId: string;
   beforeRevision: number;
   afterRevision: number;
@@ -26,6 +27,22 @@ interface CanvasTransaction {
 }
 
 const transactions = new Map<string, CanvasTransaction[]>();
+
+export interface CanvasUndoEntry {
+  actionId: string;
+  commandType: CanvasCommand['type'];
+  beforeRevision: number;
+  afterRevision: number;
+}
+
+export function getCanvasUndoHistory(workspaceId: string): CanvasUndoEntry[] {
+  const history = transactions.get(workspaceId) ?? [];
+  const revision = useAssistantStore.getState().ensureWorkspace(workspaceId).revision;
+  if (!history.length || history.at(-1)?.afterRevision !== revision) return [];
+  return history.map(({ actionId, commandType, beforeRevision, afterRevision }) => ({
+    actionId, commandType, beforeRevision, afterRevision,
+  }));
+}
 
 export function buildCanvasSnapshot(workspaceId: string): CanvasSnapshot {
   const flow = useFlowStore.getState();
@@ -110,6 +127,7 @@ export function executeCanvasCommand(
 
   const transaction: CanvasTransaction = {
     actionId: command.actionId,
+    commandType: command.type,
     workspaceId: activeWorkspaceId,
     beforeRevision: assistant.revision,
     afterRevision: assistant.revision + 1,
@@ -128,6 +146,14 @@ export function executeCanvasCommand(
         if (command.payload.assistantMessage) useChatStore.getState().addMessage(nodeId, 'assistant', command.payload.assistantMessage);
         break;
       }
+      case 'create_nodes':
+        for (const item of command.payload.nodes) {
+          const nodeId = createNodeAtEnd(item.topic);
+          useChatStore.getState().initConversation(nodeId);
+          useFlowStore.getState().updateNodeData(nodeId, { label: item.label, color: item.color });
+          if (item.assistantMessage) useChatStore.getState().addMessage(nodeId, 'assistant', item.assistantMessage);
+        }
+        break;
       case 'create_branch':
         if (handleCreateBranchFromNode(command.payload).includes('not found')) throw new Error('Parent node was not found.');
         break;
@@ -179,9 +205,8 @@ export function executeCanvasCommand(
 
 export function undoCanvasCommand(workspaceId: string, actionId?: string): boolean {
   const history = transactions.get(workspaceId) ?? [];
-  const index = actionId ? history.findIndex((item) => item.actionId === actionId) : history.length - 1;
-  if (index < 0) return false;
-  const transaction = history[index];
+  const transaction = history.at(-1);
+  if (!transaction || (actionId && transaction.actionId !== actionId)) return false;
   if (useAssistantStore.getState().ensureWorkspace(workspaceId).revision !== transaction.afterRevision) return false;
   beginCanvasRevisionSuppression();
   useFlowStore.getState().setNodes(transaction.nodes);
@@ -189,6 +214,23 @@ export function undoCanvasCommand(workspaceId: string, actionId?: string): boole
   useChatStore.getState().setConversations(transaction.conversations);
   endCanvasRevisionSuppression();
   useAssistantStore.getState().setRevision(workspaceId, transaction.beforeRevision);
-  transactions.set(workspaceId, history.slice(0, index));
+  transactions.set(workspaceId, history.slice(0, -1));
   return true;
+}
+
+export function undoAllCanvasCommands(workspaceId: string): number {
+  const history = transactions.get(workspaceId) ?? [];
+  const first = history[0];
+  const last = history.at(-1);
+  if (!first || !last) return 0;
+  if (useAssistantStore.getState().ensureWorkspace(workspaceId).revision !== last.afterRevision) return 0;
+
+  beginCanvasRevisionSuppression();
+  useFlowStore.getState().setNodes(first.nodes);
+  useFlowStore.getState().setEdges(first.edges);
+  useChatStore.getState().setConversations(first.conversations);
+  endCanvasRevisionSuppression();
+  useAssistantStore.getState().setRevision(workspaceId, first.beforeRevision);
+  transactions.set(workspaceId, []);
+  return history.length;
 }

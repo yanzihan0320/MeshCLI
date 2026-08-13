@@ -10,6 +10,8 @@ Use exact node IDs from the current `CanvasSnapshot`. Search for a close topic m
 - Use branches for genuinely parallel directions.
 - Use merge nodes only when at least two existing source IDs are known.
 - Keep titles concise and put evidence in assistant messages.
+- For two or more independent nodes, use one atomic `create_nodes` call so the set shares one revision and one Undo transaction.
 - Reads, searches, focus, ordinary creation, connection, append and updates are safe to request directly.
 - Deletion is destructive and must wait for explicit confirmation.
 - After an action resumes, report the real command result. Never claim success after `stale`, `rejected`, or `failed`.
+- In the final answer, use readable node titles. Hide node IDs, revisions, action IDs, and stale-retry narration unless the user asks for debugging details.

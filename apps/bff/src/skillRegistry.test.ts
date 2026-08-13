@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { SkillRegistry } from './skillRegistry';
+import { CapabilityStore } from './capabilityStore';
 
 const roots: string[] = [];
 afterEach(async () => Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))));
@@ -17,7 +18,7 @@ describe('SkillRegistry', () => {
     await writeFile(join(skill, 'SKILL.md'), '---\nname: canvas-review\ndescription: Review a MeshCLI canvas; 画布 节点 创建\n---\n# Instructions\n');
     await writeFile(join(skill, 'references', 'rules.md'), 'reference rules');
     await writeFile(join(skill, 'scripts', 'unsafe.js'), 'throw new Error("must not run")');
-    const registry = new SkillRegistry(root);
+    const registry = new SkillRegistry(root, new CapabilityStore(join(root, 'capabilities.json')));
     const catalog = await registry.list('unbound-workspace');
     expect(catalog.find((item) => item.name === 'canvas-review')).toMatchObject({ source: 'built-in', enabled: true });
     const activated = await registry.activate('unbound-workspace', 'Use $canvas-review please');
@@ -32,7 +33,23 @@ describe('SkillRegistry', () => {
     roots.push(root);
     await mkdir(join(root, 'Bad Skill'));
     await writeFile(join(root, 'Bad Skill', 'SKILL.md'), '# missing frontmatter');
-    const catalog = await new SkillRegistry(root).list('unbound-workspace');
+    const catalog = await new SkillRegistry(root, new CapabilityStore(join(root, 'capabilities.json'))).list('unbound-workspace');
     expect(catalog[0]).toMatchObject({ enabled: false });
+  });
+
+  it('persists enablement and usage separately from installation', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'meshcli-skills-'));
+    roots.push(root);
+    const skill = join(root, 'review-code');
+    await mkdir(skill);
+    await writeFile(join(skill, 'SKILL.md'), '---\nname: review-code\ndescription: Review code when the user asks for review\n---\n# Review\n');
+    const preferences = new CapabilityStore(join(root, 'capabilities.json'));
+    const registry = new SkillRegistry(root, preferences);
+    await registry.setEnabled('workspace-1', 'review-code', false);
+    expect((await registry.list('workspace-1'))[0]?.enabled).toBe(false);
+    expect(await registry.activate('workspace-1', 'Use $review-code', 'node-agent')).toEqual([]);
+    await registry.setEnabled('workspace-1', 'review-code', true);
+    expect(await registry.activate('workspace-1', 'Use $review-code', 'node-agent')).toHaveLength(1);
+    expect(await registry.usage('workspace-1')).toMatchObject([{ name: 'review-code', agentType: 'node-agent' }]);
   });
 });

@@ -1,7 +1,8 @@
 {
   "dependencies": ["."],
   "graphs": {
-    "default": "./main.py:graph"
+    "default": "./main.py:graph",
+    "node-supervisor": "./main.py:node_supervisor_graph"
   },
   "env": ".env"
 }

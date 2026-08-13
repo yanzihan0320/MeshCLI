@@ -267,7 +267,7 @@ def configure_llm(model_override: str | None = None) -> LLM:
         reasoning_effort=None,
         max_output_tokens=int(os.environ.get("AGENT_MAX_OUTPUT_TOKENS", "8192")),
         timeout=int(os.environ.get("AGENT_LLM_TIMEOUT_SECONDS", "300")),
-        num_retries=2,
+        num_retries=int(os.environ.get("AGENT_LLM_MAX_RETRIES", "5")),
         log_completions=False,
     )
 

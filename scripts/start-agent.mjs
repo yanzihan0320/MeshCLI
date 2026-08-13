@@ -11,7 +11,11 @@ const forceGlobal = process.argv.includes('--global');
 const command = !forceGlobal && existsSync(venvCommand) ? venvCommand : 'langgraph';
 const port = process.env.LANGGRAPH_PORT ?? '8133';
 
-const result = spawnSync(command, ['dev', '--port', port], {
+// The stdio MCP transport performs short synchronous executable checks while
+// spawning a trusted local server. LangGraph dev otherwise rejects those
+// checks before the adapter can start; production Agent Server deployments do
+// not use this development-only blocking detector.
+const result = spawnSync(command, ['dev', '--allow-blocking', '--port', port], {
   cwd: agentDir,
   stdio: 'inherit',
   shell: false,
@@ -23,4 +27,3 @@ if (result.error) {
   process.exit(1);
 }
 process.exit(result.status ?? 1);
-

@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 from src.prompts import SYSTEM_PROMPT
 from src.runtime import build_graph
 from src.canvas_tools import CANVAS_TOOLS, MCP_TOOLS
+from src.node_supervisor_prompt import NODE_SUPERVISOR_PROMPT
 
 
 AGENT_DIR = Path(__file__).resolve().parent
@@ -40,13 +41,19 @@ graph = build_graph(
     system_prompt=SYSTEM_PROMPT,
 )
 
+node_supervisor_graph = build_graph(
+    runtime,
+    tools=[*MCP_TOOLS],
+    system_prompt=NODE_SUPERVISOR_PROMPT,
+)
+
 
 if __name__ == "__main__":
     import subprocess
 
     raise SystemExit(
         subprocess.call(
-            ["langgraph", "dev", "--port", "8133"],
+            ["langgraph", "dev", "--allow-blocking", "--port", "8133"],
             cwd=os.path.dirname(__file__),
             env=os.environ.copy(),
         )

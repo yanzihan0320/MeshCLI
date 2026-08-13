@@ -97,6 +97,18 @@ interface StoredRun {
 
 const MAX_RETAINED_RUNS = 100;
 
+function publicAgentError(error: unknown): string {
+  const detail = error instanceof Error ? error.message : String(error);
+  if (/insufficient balance|exceeded_current_quota|quota.*exhaust/i.test(detail)) {
+    return 'Model account quota is exhausted. Recharge the configured provider account or switch models, then retry.';
+  }
+  if (/429|rate[_ -]?limit|max (?:organization )?concurrency|max rpm/i.test(detail)) {
+    const retry = detail.match(/after\s+(\d+(?:\.\d+)?)\s+seconds?/i)?.[1];
+    return `Model service is temporarily rate-limited.${retry ? ` Retry after about ${retry} seconds.` : ' Please retry shortly.'}`;
+  }
+  return detail;
+}
+
 export class AgentRunManager {
   private readonly runs = new Map<string, StoredRun>();
 
@@ -131,15 +143,17 @@ export class AgentRunManager {
     return () => run.subscribers.delete(subscriber);
   }
 
-  async cancel(runId: string): Promise<boolean> {
+  async cancel(runId: string): Promise<AgentEvent | undefined> {
     const run = this.runs.get(runId);
     if (!run || ['applied', 'rejected', 'conflicted', 'finished', 'failed', 'cancelled'].includes(run.status)) {
-      return false;
+      return undefined;
     }
     run.controller.abort();
-    await this.adapter.cancel?.(runId).catch(() => undefined);
-    this.append(run, 'run_cancelled', { reason: 'Cancelled by user' });
-    return true;
+    // Publish cancellation before potentially slow OpenHands/Docker cleanup so
+    // every SSE subscriber and Stop button responds immediately.
+    const event = this.append(run, 'run_cancelled', { reason: 'Cancelled by user' });
+    void this.adapter.cancel?.(runId).catch(() => undefined);
+    return event;
   }
 
   async apply(runId: string): Promise<AgentEvent | undefined> {
@@ -196,7 +210,7 @@ export class AgentRunManager {
       if (!run.controller.signal.aborted) {
         await this.adapter.fail?.(run.runId).catch(() => undefined);
         this.append(run, 'run_failed', {
-          error: error instanceof Error ? error.message : String(error),
+          error: publicAgentError(error),
         });
       }
     }

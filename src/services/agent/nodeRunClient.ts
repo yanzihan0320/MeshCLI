@@ -87,11 +87,15 @@ export class NodeRunClient {
     if (buffer.trim()) parseBlock(buffer);
   }
 
-  async cancelRun(runId: string): Promise<void> {
+  async cancelRun(runId: string): Promise<AgentEvent | undefined> {
     const response = await fetch(`/api/runs/${encodeURIComponent(runId)}/cancel`, {
       method: 'POST',
     });
-    if (!response.ok && response.status !== 409) throw new Error(await responseError(response));
+    if (response.status === 409) return undefined;
+    if (!response.ok) throw new Error(await responseError(response));
+    const parsed = AgentEventSchema.safeParse(await response.json().catch(() => null));
+    if (!parsed.success) throw new Error('Gateway returned an invalid cancellation event.');
+    return parsed.data;
   }
 
   async reviewRun(runId: string, action: 'apply' | 'reject', changeSetId: string): Promise<AgentEvent> {

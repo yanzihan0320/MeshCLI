@@ -29,4 +29,20 @@ describe('formatAgentPrompt', () => {
     expect(prompt).toContain('Attached reference: notes.md');
     expect(prompt).toContain('# Notes\nImportant');
   });
+
+  it('retains recent context and truncates oversized node history instead of failing', () => {
+    const prompt = formatAgentPrompt({
+      nodeId: 'node-1', workspaceId: 'workspace-1', prompt: 'Inspect README',
+      context: {
+        topic: 'Large node',
+        messages: Array.from({ length: 40 }, (_, index) => ({
+          role: index % 2 ? 'assistant' as const : 'user' as const,
+          content: `${index}: ${'内容'.repeat(20_000)}`,
+        })),
+      },
+    });
+    expect(Buffer.byteLength(prompt, 'utf8')).toBeLessThanOrEqual(500_000);
+    expect(prompt).toContain('MeshCLI omitted or truncated');
+    expect(prompt).toContain('Inspect README');
+  });
 });

@@ -621,9 +621,9 @@ export function ChatNodeComponent({ id, data, selected }: NodeProps<ChatNode>) {
         onApply={agentRun.applyRun}
         onReject={agentRun.rejectRun}
         onUndo={agentRun.undoRun}
-        fullHeight={inputMode === 'agent'}
+        fullHeight={false}
       />
-      {inputMode === 'chat' && <ChatMessageList nodeId={id} onExplore={handleExplore} />}
+      <ChatMessageList nodeId={id} onExplore={handleExplore} />
       <ChatInput
         nodeId={id}
         onSend={sendMessage}

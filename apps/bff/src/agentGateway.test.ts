@@ -89,7 +89,7 @@ describe('AgentRunManager', () => {
     });
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    await expect(manager.cancel(created.runId)).resolves.toBe(true);
+    await expect(manager.cancel(created.runId)).resolves.toMatchObject({ type: 'run_cancelled' });
     expect(adapterCancelled).toBe(true);
     expect(manager.get(created.runId)?.events.at(-1)?.type).toBe('run_cancelled');
   });

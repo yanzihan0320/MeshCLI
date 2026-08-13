@@ -11,6 +11,7 @@ export interface AssistantChatMessage {
 
 export interface WorkspaceAssistantState {
   threadId: string;
+  historyStartIndex?: number;
   revision: number;
   messages: AssistantChatMessage[];
   activity: WorkspaceAssistantEvent[];
@@ -29,17 +30,32 @@ interface AssistantState {
   setPendingCommand: (workspaceId: string, command?: CanvasCommand) => void;
   setRevision: (workspaceId: string, revision: number) => void;
   setUsedSkills: (workspaceId: string, skills: string[]) => void;
+  rotateThread: (workspaceId: string, failedThreadId: string) => void;
   removeWorkspace: (workspaceId: string) => void;
 }
 
 function createWorkspaceState(): WorkspaceAssistantState {
   return {
     threadId: crypto.randomUUID(),
+    historyStartIndex: 0,
     revision: 0,
     messages: [],
     activity: [],
     running: false,
     usedSkills: [],
+  };
+}
+
+function recoverFailedThread(workspace: WorkspaceAssistantState): WorkspaceAssistantState {
+  const terminal = [...workspace.activity].reverse()
+    .find((event) => event.type === 'turn_failed' || event.type === 'turn_finished');
+  if (terminal?.type !== 'turn_failed' || terminal.threadId !== workspace.threadId) return workspace;
+  return {
+    ...workspace,
+    threadId: crypto.randomUUID(),
+    historyStartIndex: workspace.messages.length,
+    running: false,
+    pendingCommand: undefined,
   };
 }
 
@@ -52,7 +68,13 @@ export const useAssistantStore = create<AssistantState>()(
       workspaces: {},
       ensureWorkspace: (workspaceId) => {
         const existing = get().workspaces[workspaceId];
-        if (existing) return existing;
+        if (existing) {
+          const recovered = recoverFailedThread(existing);
+          if (recovered !== existing) {
+            set({ workspaces: { ...get().workspaces, [workspaceId]: recovered } });
+          }
+          return recovered;
+        }
         const created = createWorkspaceState();
         set({ workspaces: { ...get().workspaces, [workspaceId]: created } });
         return created;
@@ -102,6 +124,22 @@ export const useAssistantStore = create<AssistantState>()(
         const workspace = state.workspaces[workspaceId] ?? createWorkspaceState();
         return { workspaces: { ...state.workspaces, [workspaceId]: { ...workspace, usedSkills } } };
       }),
+      rotateThread: (workspaceId, failedThreadId) => set((state) => {
+        const workspace = state.workspaces[workspaceId] ?? createWorkspaceState();
+        if (workspace.threadId !== failedThreadId) return state;
+        return {
+          workspaces: {
+            ...state.workspaces,
+            [workspaceId]: {
+              ...workspace,
+              threadId: crypto.randomUUID(),
+              historyStartIndex: workspace.messages.length,
+              running: false,
+              pendingCommand: undefined,
+            },
+          },
+        };
+      }),
       removeWorkspace: (workspaceId) => set((state) => {
         const { [workspaceId]: _, ...workspaces } = state.workspaces;
         void _;
@@ -114,4 +152,3 @@ export const useAssistantStore = create<AssistantState>()(
     },
   ),
 );
-

@@ -7,6 +7,33 @@ import { nodeRunClient } from '../services/agent/nodeRunClient';
 const EMPTY_RUNS = [] as const;
 const MAX_AGENT_ATTACHMENT_BYTES = 250_000;
 
+function upsertAgentMessage(nodeId: string, runId: string, content: string) {
+  const chat = useChatStore.getState();
+  const existing = chat.getMessages(nodeId)
+    .find((message) => message.role === 'assistant' && message.triggeredBy === runId);
+  if (existing) {
+    chat.addOrUpdateMessage(nodeId, { ...existing, content });
+  } else {
+    chat.addMessage(nodeId, 'assistant', content, undefined, runId);
+  }
+}
+
+function terminalAgentMessage(event: { type: string; payload: Record<string, unknown> }, responseText: string): string {
+  const partial = responseText.trim();
+  if (event.type === 'run_failed') {
+    const rawError = String(event.payload.error ?? 'Unknown execution error.');
+    const failure = rawError.includes('Docker is not available')
+      ? 'The Agent could not start because Docker Desktop is not running. Start Docker Desktop and retry this task.'
+      : `The Agent run failed: ${rawError}`;
+    return partial ? `${partial}\n\n${failure}` : failure;
+  }
+  if (event.type === 'run_cancelled') {
+    const cancelled = String(event.payload.reason ?? 'Agent run cancelled.');
+    return partial ? `${partial}\n\n${cancelled}` : cancelled;
+  }
+  return partial || String(event.payload.message ?? 'Agent run completed.');
+}
+
 export async function readAgentAttachments(files: File[]) {
   if (files.length > 10) throw new Error('Attach at most 10 text files to an Agent run.');
   return Promise.all(files.map(async (file) => {
@@ -61,8 +88,10 @@ export function useNodeAgentRun(nodeId: string, topic: string) {
           .filter(Boolean).join('\n'),
       }];
     });
+    let activeRunId: string | undefined;
     try {
       const attachments = await readAgentAttachments(files);
+      useChatStore.getState().addMessage(nodeId, 'user', trimmedPrompt);
       const created = await nodeRunClient.createRun({
         nodeId,
         workspaceId,
@@ -77,34 +106,50 @@ export function useNodeAgentRun(nodeId: string, topic: string) {
           references,
         },
       });
+      activeRunId = created.runId;
       useFlowStore.getState().beginNodeRun(nodeId, created.runId);
       const controller = new AbortController();
       streamControllerRef.current = controller;
       await nodeRunClient.streamEvents(created.runId, (event) => {
         useFlowStore.getState().appendNodeRunEvent(nodeId, event);
-        if (event.type === 'text_delta') responseTextRef.current += String(event.payload.delta ?? '');
+        if (event.type === 'text_delta') {
+          responseTextRef.current += String(event.payload.delta ?? '');
+          upsertAgentMessage(nodeId, created.runId, responseTextRef.current);
+        }
         if (event.type === 'run_finished' && !responseTextRef.current.trim()) {
           responseTextRef.current = String(event.payload.summary ?? '');
         }
-        if (['review_ready', 'run_failed', 'run_cancelled'].includes(event.type)
+        if (['review_ready', 'patch_applied', 'patch_reverted', 'run_failed', 'run_cancelled'].includes(event.type)
           && !finalizedRunsRef.current.has(created.runId)) {
           finalizedRunsRef.current.add(created.runId);
-          const existing = useChatStore.getState().getMessages(nodeId)
-            .some((message) => message.triggeredBy === created.runId);
-          if (!existing) {
-            const rawError = String(event.payload.error ?? '');
-            const response = event.type === 'run_failed'
-              ? rawError.includes('Docker is not available')
-                ? 'The Agent could not start because Docker Desktop is not running. Start Docker Desktop and retry this task.'
-                : `The Agent run failed: ${rawError || 'Unknown execution error.'}`
-              : responseTextRef.current.trim() || String(event.payload.message ?? 'Agent run completed.');
-            useChatStore.getState().addMessage(nodeId, 'assistant', response, undefined, created.runId);
-          }
+          upsertAgentMessage(nodeId, created.runId, terminalAgentMessage(event, responseTextRef.current));
         }
       }, controller.signal);
     } catch (error) {
       if (!(error instanceof DOMException && error.name === 'AbortError')) {
-        setClientError(error instanceof Error ? error.message : String(error));
+        const message = error instanceof Error ? error.message : String(error);
+        setClientError(message);
+        if (activeRunId) {
+          const run = useFlowStore.getState().nodes.find((node) => node.id === nodeId)
+            ?.data.agentRuns?.find((candidate) => candidate.runId === activeRunId);
+          if (run && !['failed', 'cancelled', 'review_ready', 'applied', 'rejected', 'conflicted', 'reverted'].includes(run.status)) {
+            const sequence = Math.max(-1, ...run.events.map((event) => event.sequence)) + 1;
+            useFlowStore.getState().appendNodeRunEvent(nodeId, {
+              version: 1,
+              eventId: `client-failure-${crypto.randomUUID()}`,
+              runId: activeRunId,
+              nodeId,
+              sequence,
+              timestamp: Date.now(),
+              type: 'run_failed',
+              payload: { error: message, source: 'client' },
+            });
+            finalizedRunsRef.current.add(activeRunId);
+            upsertAgentMessage(nodeId, activeRunId, terminalAgentMessage({
+              type: 'run_failed', payload: { error: message },
+            }, responseTextRef.current));
+          }
+        }
       }
     } finally {
       streamControllerRef.current = undefined;
@@ -115,11 +160,18 @@ export function useNodeAgentRun(nodeId: string, topic: string) {
     if (!latestRun || !isRunning) return;
     setClientError(undefined);
     try {
-      await nodeRunClient.cancelRun(latestRun.runId);
+      const event = await nodeRunClient.cancelRun(latestRun.runId);
+      if (event) {
+        useFlowStore.getState().appendNodeRunEvent(nodeId, event);
+        if (!finalizedRunsRef.current.has(latestRun.runId)) {
+          finalizedRunsRef.current.add(latestRun.runId);
+          upsertAgentMessage(nodeId, latestRun.runId, terminalAgentMessage(event, responseTextRef.current));
+        }
+      }
     } catch (error) {
       setClientError(error instanceof Error ? error.message : String(error));
     }
-  }, [isRunning, latestRun]);
+  }, [isRunning, latestRun, nodeId]);
 
   const reviewRun = useCallback(async (action: 'apply' | 'reject', expectedChangeSetId?: string) => {
     if (!latestRun || latestRun.status !== 'review_ready' || isReviewing) return;
@@ -150,6 +202,10 @@ export function useNodeAgentRun(nodeId: string, topic: string) {
 
   const undoRun = useCallback(async (expectedChangeSetId?: string) => {
     if (!latestRun || latestRun.status !== 'applied' || isReviewing) return;
+    if (!latestRun.changeSet?.files.length) {
+      setClientError('This was a read-only Agent run; no project files were changed, so there is nothing to undo.');
+      return;
+    }
     const changeSetId = expectedChangeSetId ?? latestRun.changeSet?.changeSetId;
     if (!changeSetId) return setClientError('This run has no applied change set to undo.');
     setClientError(undefined);

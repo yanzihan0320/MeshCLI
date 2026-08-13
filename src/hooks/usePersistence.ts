@@ -4,7 +4,7 @@ import { useFlowStore } from '../stores/flowStore';
 import { useChatStore } from '../stores/chatStore';
 import { useWorkspaceStore } from '../stores/workspaceStore';
 import type { WorkspaceData, WorkspaceFile } from '../types/workspace';
-import { beginCanvasRevisionSuppression, endCanvasRevisionSuppression, markCanvasMutated } from '../services/agent/canvasRevision';
+import { beginCanvasRevisionSuppression, endCanvasRevisionSuppression, markChatCanvasMutated, markFlowCanvasMutated } from '../services/agent/canvasRevision';
 
 const DEBOUNCE_MS = 1000;
 
@@ -220,8 +220,8 @@ export function usePersistence() {
   useEffect(() => {
     const unsubFlow = useFlowStore.subscribe(debouncedSave);
     const unsubChat = useChatStore.subscribe(debouncedSave);
-    const unsubFlowRevision = useFlowStore.subscribe(markCanvasMutated);
-    const unsubChatRevision = useChatStore.subscribe(markCanvasMutated);
+    const unsubFlowRevision = useFlowStore.subscribe(markFlowCanvasMutated);
+    const unsubChatRevision = useChatStore.subscribe(markChatCanvasMutated);
     return () => {
       unsubFlow();
       unsubChat();

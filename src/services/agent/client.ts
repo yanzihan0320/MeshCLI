@@ -65,7 +65,19 @@ export class AgentClient {
           const line = frame.split('\n').find((candidate) => candidate.startsWith('data:'));
           if (!line) continue;
           const parsed = WorkspaceAssistantEventSchema.safeParse(JSON.parse(line.slice(5).trim()));
-          if (parsed.success) onEvent(parsed.data);
+          if (parsed.success) {
+            onEvent(parsed.data);
+          } else {
+            onEvent({
+              version: 1,
+              eventId: crypto.randomUUID(),
+              workspaceId: body.workspaceId,
+              threadId: body.threadId,
+              timestamp: Date.now(),
+              type: 'turn_failed',
+              payload: { error: 'The assistant returned an invalid event. Please retry after restarting the local services.' },
+            });
+          }
         }
       }
     } catch (error) {

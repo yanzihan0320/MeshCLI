@@ -14,6 +14,7 @@ describe('Canvas assistant protocol', () => {
     ['search_nodes', 'read', { query: 'auth' }],
     ['focus_node', 'read', { nodeId: 'n1' }],
     ['create_node', 'write', { topic: 'Direction' }],
+    ['create_nodes', 'write', { nodes: [{ topic: 'Direction A' }, { topic: 'Direction B' }] }],
     ['create_branch', 'write', { parentNodeId: 'n1', topic: 'Branch' }],
     ['merge_nodes', 'write', { nodeIds: ['n1', 'n2'], topic: 'Merge', mergeAction: 'synthesize' }],
     ['append_message', 'write', { nodeId: 'n1', role: 'assistant', content: 'evidence' }],
@@ -27,6 +28,7 @@ describe('Canvas assistant protocol', () => {
   it('rejects unknown commands, invalid payloads, and incorrect risk', () => {
     expect(CanvasCommandSchema.safeParse({ ...base, type: 'move_everything', risk: 'write', payload: {} }).success).toBe(false);
     expect(CanvasCommandSchema.safeParse({ ...base, type: 'merge_nodes', risk: 'write', payload: { nodeIds: ['n1'] } }).success).toBe(false);
+    expect(CanvasCommandSchema.safeParse({ ...base, type: 'create_nodes', risk: 'write', payload: { nodes: [] } }).success).toBe(false);
     expect(CanvasCommandSchema.safeParse({ ...base, type: 'delete_node', risk: 'write', payload: { nodeId: 'n1' } }).success).toBe(false);
   });
 
@@ -39,4 +41,3 @@ describe('Canvas assistant protocol', () => {
     }).success).toBe(true);
   });
 });
-

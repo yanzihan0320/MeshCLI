@@ -56,6 +56,14 @@ export const CanvasCommandSchema = z.discriminatedUnion('type', [
     label: z.string().max(1_000).optional(),
     color: z.string().max(100).optional(),
   })),
+  command('create_nodes', z.object({
+    nodes: z.array(z.object({
+      topic: z.string().min(1).max(10_000),
+      assistantMessage: z.string().max(50_000).optional(),
+      label: z.string().max(1_000).optional(),
+      color: z.string().max(100).optional(),
+    })).min(1).max(20),
+  })),
   command('create_branch', z.object({
     parentNodeId: z.string().min(1),
     topic: z.string().min(1).max(10_000),

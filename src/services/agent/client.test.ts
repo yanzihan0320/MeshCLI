@@ -36,4 +36,12 @@ describe('AgentClient', () => {
     expect(events[0]?.type).toBe('turn_failed');
     expect(events[0]?.payload.error).toBe('LangGraph unavailable');
   });
+
+  it('turns an invalid SSE event into a visible failure instead of silently hanging', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('data: {"type":"unknown"}\n\n', { status: 200 })));
+    const events: AgentEvent[] = [];
+    await new AgentClient().sendTurn(input, 'custom', (candidate) => events.push(candidate));
+    expect(events).toHaveLength(1);
+    expect(events[0]?.type).toBe('turn_failed');
+  });
 });

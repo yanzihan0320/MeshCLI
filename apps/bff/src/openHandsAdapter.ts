@@ -13,6 +13,13 @@ const CONTROL_PREFIX = 'MESHCLI_CONTROL ';
 const MAX_STDERR_CHARS = 16_000;
 const execFileAsync = promisify(execFile);
 const MAX_AGENT_CONTEXT_BYTES = 500_000;
+const TARGET_AGENT_CONTEXT_BYTES = 450_000;
+
+function truncateUtf8(value: string, maxBytes: number): string {
+  const encoded = Buffer.from(value, 'utf8');
+  if (encoded.byteLength <= maxBytes) return value;
+  return `${encoded.subarray(0, Math.max(0, maxBytes - 80)).toString('utf8')}\n[...context truncated by MeshCLI...]`;
+}
 
 interface RunnerEvent {
   type: AdapterEvent['type'];
@@ -78,26 +85,47 @@ export function planTaskBoard(runId: string, plan: unknown): TaskBoardBlock | un
 }
 
 export function formatAgentPrompt(input: AgentRunRequest): string {
-  const sections = [input.prompt];
-  if (input.context.topic) sections.push(`\n--- Current node: ${input.context.topic} ---`);
-  if (input.context.sourceText) sections.push(input.context.sourceText);
-  if (input.context.messages.length) {
-    sections.push('\n--- Current node conversation ---');
-    for (const message of input.context.messages) sections.push(`${message.role}: ${message.content}`);
-    sections.push('--- End current node conversation ---');
+  const sections: string[] = [];
+  let usedBytes = 0;
+  let omittedSections = 0;
+  const append = (value: string, perSectionLimit = 120_000) => {
+    const bounded = truncateUtf8(value, perSectionLimit);
+    const bytes = Buffer.byteLength(bounded, 'utf8') + 1;
+    if (usedBytes + bytes > TARGET_AGENT_CONTEXT_BYTES) {
+      omittedSections += 1;
+      return;
+    }
+    sections.push(bounded);
+    usedBytes += bytes;
+  };
+
+  append(input.prompt, 260_000);
+  if (input.context.topic) append(`\n--- Current node: ${input.context.topic} ---`, 12_000);
+  if (input.context.sourceText) append(input.context.sourceText, 60_000);
+
+  // User attachments are explicit run inputs, so retain them before older chat
+  // history while still applying the shared context budget.
+  const attachments = input.context.attachments ?? [];
+  if (attachments.length) append('\nUse the following user-attached files as read-only reference context.');
+  for (const attachment of attachments) {
+    append(`\n--- Attached reference: ${attachment.name} (${attachment.mediaType ?? 'text/plain'}) ---\n${attachment.content}\n--- End attachment ---`, 140_000);
   }
   for (const reference of input.context.references ?? []) {
-    sections.push(`\n--- Referenced node: ${reference.title} (${reference.nodeId}) ---`);
-    sections.push(reference.content);
-    sections.push('--- End referenced node ---');
+    append(`\n--- Referenced node: ${reference.title} (${reference.nodeId}) ---\n${reference.content}\n--- End referenced node ---`, 80_000);
   }
-  const attachments = input.context.attachments ?? [];
-  if (attachments.length) sections.push('\nUse the following user-attached files as read-only reference context.');
-  for (const attachment of attachments) {
-    sections.push(`\n--- Attached reference: ${attachment.name} (${attachment.mediaType ?? 'text/plain'}) ---`);
-    sections.push(attachment.content);
-    sections.push('--- End attachment ---');
+  if (input.context.messages.length) {
+    const retained: string[] = [];
+    for (const message of [...input.context.messages].reverse()) {
+      const line = truncateUtf8(`${message.role}: ${message.content}`, 40_000);
+      if (Buffer.byteLength(retained.join('\n'), 'utf8') + Buffer.byteLength(line, 'utf8') > 120_000) {
+        omittedSections += 1;
+        break;
+      }
+      retained.unshift(line);
+    }
+    append(`\n--- Recent current-node conversation ---\n${retained.join('\n')}\n--- End current-node conversation ---`, 130_000);
   }
+  if (omittedSections) append(`\n[MeshCLI omitted or truncated ${omittedSections} older context section(s) to stay within the 500 KB Agent budget.]`, 1_000);
   const prompt = sections.join('\n');
   if (Buffer.byteLength(prompt, 'utf8') > MAX_AGENT_CONTEXT_BYTES) {
     throw new Error('Agent context exceeds the 500 KB limit. Remove attachments or referenced nodes.');
@@ -192,6 +220,18 @@ export class OpenHandsAdapter implements AgentAdapter {
       type: 'change_set_created',
       payload: { changeSet },
     };
+    if (changeSet.files.length === 0) {
+      yield {
+        type: 'patch_applied',
+        payload: {
+          changeSetId: changeSet.changeSetId,
+          fileCount: 0,
+          undoAvailable: false,
+          message: 'Read-only run completed. The real project was not modified.',
+        },
+      };
+      return;
+    }
     for (const block of createChangeSetReviewBlocks(changeSet)) {
       yield {
         type: 'a2ui_block',
@@ -234,7 +274,8 @@ export class OpenHandsAdapter implements AgentAdapter {
         payload: {
           changeSetId: changeSet.changeSetId,
           fileCount: changeSet.files.length,
-          undoExpiresAt: result.undoExpiresAt,
+          undoAvailable: changeSet.files.length > 0,
+          ...(changeSet.files.length > 0 ? { undoExpiresAt: result.undoExpiresAt } : {}),
           message: changeSet.files.length ? 'Changes applied to the real project.' : 'No changes to apply.',
         },
       },
@@ -273,12 +314,11 @@ export class OpenHandsAdapter implements AgentAdapter {
 
   async cancel(runId: string): Promise<void> {
     const child = this.processes.get(runId);
-    let containerId = this.containers.get(runId);
-    const deadline = Date.now() + 15_000;
-    while (child && !containerId && child.exitCode === null && Date.now() < deadline) {
-      await new Promise((resolveDelay) => setTimeout(resolveDelay, 200));
-      containerId = this.containers.get(runId);
-    }
+    // Stop the runner before any asynchronous cleanup. Waiting for Docker to
+    // report its container ID kept the old LLM request alive for up to 15s,
+    // so an immediate retry could exceed providers with concurrency=1.
+    if (child && !child.killed) child.kill('SIGTERM');
+    const containerId = this.containers.get(runId);
     if (containerId && /^[a-f0-9]{12,64}$/i.test(containerId)) {
       await execFileAsync('docker', ['stop', '--time', '5', containerId], {
         windowsHide: true,
@@ -286,7 +326,6 @@ export class OpenHandsAdapter implements AgentAdapter {
       }).catch(() => undefined);
     }
     this.containers.delete(runId);
-    if (child && !child.killed) child.kill('SIGTERM');
     this.processes.delete(runId);
     await this.workspaces.cancel(runId);
   }
