@@ -152,6 +152,9 @@
     ,"system": "系统"
     ,"copyMessage": "复制消息"
     ,"copiedMessage": "消息已复制"
+    ,"thinking": "正在思考…"
+    ,"answering": "正在生成回答…"
+    ,"retrying": "请求过于频繁，正在重试…"
   },
   "node": {
     "expand": "展开",
@@ -205,6 +208,7 @@
     "context": "上下文",
     "response": "Agent 回答",
     "eventLog": "技术事件日志",
+    "resizePanel": "拖动以调整 Agent 日志区域大小",
     "changedFiles": "已更改文件（{{count}}）",
     "applyAll": "全部应用",
     "rejectAll": "全部拒绝",
@@ -281,6 +285,12 @@
       "undoLatestSuccess": "已撤销最近一次画布操作。",
       "undoAllSuccess": "已撤销全部 {{count}} 个画布操作。",
       "undoUnavailable": "画布已经变化或页面曾被重新加载，当前操作无法安全撤销。",
+      "retractTurn": "撤回本轮",
+      "retractTurnConfirm": "撤回最近发送的消息及其结果吗？本轮产生的可撤销画布操作也会一并恢复。",
+      "retractTurnSuccess": "已撤回最近一轮对话。",
+      "retractTurnCanvasSuccess": "已撤回最近一轮，并恢复 {{count}} 个画布操作。",
+      "retractTurnPartial": "对话已撤回，但画布后来发生变化或页面曾重新加载，部分画布操作无法安全恢复。",
+      "retractTurnUnavailable": "当前没有可以撤回的对话。",
       "confirmationRequired": "需要确认",
       "approve": "批准",
       "reject": "拒绝",

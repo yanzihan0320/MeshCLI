@@ -393,13 +393,13 @@ export function ChatNodeComponent({ id, data, selected }: NodeProps<ChatNode>) {
         <Handle
           type="target"
           position={Position.Left}
-          className="!bg-accent-500 !border-none !w-2 !h-2"
+          className="!left-1.5 !bg-accent-500 !border-none !w-2 !h-2"
           id="left"
         />
         <Handle
           type="source"
           position={Position.Right}
-          className="!bg-accent-400 !border-none !w-2 !h-2"
+          className="!right-1.5 !bg-accent-400 !border-none !w-2 !h-2"
           id="right"
         />
         <span className="text-xs font-medium text-accent-400 truncate max-w-[160px]">
@@ -445,13 +445,13 @@ export function ChatNodeComponent({ id, data, selected }: NodeProps<ChatNode>) {
         <Handle
           type="target"
           position={Position.Left}
-          className="!bg-accent-500 !border-none !w-2 !h-2"
+          className="!left-1.5 !bg-accent-500 !border-none !w-2 !h-2"
           id="left"
         />
         <Handle
           type="source"
           position={Position.Right}
-          className="!bg-accent-400 !border-none !w-2 !h-2"
+          className="!right-1.5 !bg-accent-400 !border-none !w-2 !h-2"
           id="right"
         />
 
@@ -531,13 +531,13 @@ export function ChatNodeComponent({ id, data, selected }: NodeProps<ChatNode>) {
       <Handle
         type="target"
         position={Position.Left}
-        className="!bg-accent-500 !border-none !w-2.5 !h-2.5"
+        className="!left-1.5 !bg-accent-500 !border-none !w-2.5 !h-2.5"
         id="left"
       />
       <Handle
         type="source"
         position={Position.Right}
-        className="!bg-accent-400 !border-none !w-2.5 !h-2.5"
+        className="!right-1.5 !bg-accent-400 !border-none !w-2.5 !h-2.5"
         id="right"
       />
 

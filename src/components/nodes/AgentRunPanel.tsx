@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import {
   ChevronDown, ChevronRight, RotateCcw, Square, Terminal, Network,
   Box, Sparkles, Database, CheckCircle2, FileCheck2,
@@ -101,6 +101,10 @@ export function AgentRunPanel({
   const { t } = useTranslation();
   const [emptyPanelExpanded, setEmptyPanelExpanded] = useState(false);
   const [collapsedRunId, setCollapsedRunId] = useState<string>();
+  const [collapsedEventLogRunId, setCollapsedEventLogRunId] = useState<string>();
+  const [panelHeight, setPanelHeight] = useState(300);
+  const panelRef = useRef<HTMLElement>(null);
+  const resizeStartRef = useRef<{ clientY: number; height: number } | null>(null);
   const visibleEvents = useMemo(() => run?.events ?? [], [run]);
   const responseText = useMemo(() => {
     if (!run) return '';
@@ -124,6 +128,7 @@ export function AgentRunPanel({
     return [...processBlocks, ...createChangeSetReviewBlocks(run.changeSet, status)];
   }, [run, t]);
   const expanded = fullHeight || (run ? collapsedRunId !== run.runId : emptyPanelExpanded);
+  const eventLogExpanded = run ? collapsedEventLogRunId !== run.runId : Boolean(clientError);
   const appliedEvent = run?.events.findLast((event) => event.type === 'patch_applied');
   const supervisorEvent = run?.events.findLast((event) => (
     event.type === 'tool_finished' && event.payload.tool === 'langgraph-node-supervisor'
@@ -159,6 +164,31 @@ export function AgentRunPanel({
     ? visibleBlocks.filter((block) => block.type !== 'confirmation' && block.type !== 'diff_review')
     : visibleBlocks;
 
+  const handleResizeStart = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const panel = panelRef.current;
+    if (!panel) return;
+    event.preventDefault();
+    event.stopPropagation();
+    resizeStartRef.current = { clientY: event.clientY, height: panel.getBoundingClientRect().height };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+
+  const handleResizeMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const start = resizeStartRef.current;
+    const panel = panelRef.current;
+    if (!start || !panel) return;
+    const nodeHeight = panel.parentElement?.getBoundingClientRect().height ?? window.innerHeight;
+    const maxHeight = Math.max(180, nodeHeight - 150);
+    setPanelHeight(Math.min(maxHeight, Math.max(140, start.height + event.clientY - start.clientY)));
+  };
+
+  const handleResizeEnd = (event: ReactPointerEvent<HTMLDivElement>) => {
+    resizeStartRef.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  };
+
   const toggleExpanded = () => {
     if (!run) {
       setEmptyPanelExpanded((value) => !value);
@@ -168,7 +198,15 @@ export function AgentRunPanel({
   };
 
   return (
-    <section className={`nodrag nopan border-b border-border/70 bg-surface-900/72 ${fullHeight ? 'flex min-h-0 flex-1 flex-col' : ''}`}>
+    <section
+      ref={panelRef}
+      style={!fullHeight && expanded ? { height: panelHeight } : undefined}
+      className={`nodrag nopan border-b border-border/70 bg-surface-900/72 ${
+        fullHeight
+          ? 'flex min-h-0 flex-1 flex-col overflow-hidden'
+          : expanded ? 'flex shrink-0 flex-col overflow-hidden' : ''
+      }`}
+    >
       <div className="flex items-center gap-2 px-3 py-2.5">
         <button
           type="button"
@@ -210,7 +248,8 @@ export function AgentRunPanel({
       </div>
 
       {expanded && (
-        <div className={`nowheel overflow-y-auto border-t border-border/70 bg-surface-950/55 px-3 py-3 ${fullHeight ? 'min-h-0 flex-1' : 'max-h-80'}`}>
+        <>
+        <div className="nowheel min-h-0 flex-1 overflow-y-auto overscroll-contain border-t border-border/70 bg-surface-950/55 px-3 py-3">
           {run && (
             <section className="mb-3 rounded-2xl border border-border/70 bg-surface-900/72 p-3 font-sans">
               <div className="flex flex-wrap gap-1.5">
@@ -276,7 +315,13 @@ export function AgentRunPanel({
           {visibleEvents.length === 0 && !clientError ? (
             <div className="py-2 text-center font-sans text-text-muted">{t('agentRun.empty')}</div>
           ) : (
-            <details className="rounded-lg border border-border bg-surface-900 p-2 font-mono text-[10px]">
+            <details
+              open={eventLogExpanded}
+              onToggle={(event) => {
+                setCollapsedEventLogRunId(event.currentTarget.open ? undefined : run?.runId);
+              }}
+              className="rounded-lg border border-border bg-surface-900 p-2 font-mono text-[10px]"
+            >
               <summary className="cursor-pointer font-sans text-[10px] text-text-muted">{t('agentRun.eventLog')} ({visibleEvents.length})</summary>
               <div className="mt-2 space-y-1">
                 {visibleEvents.map((event) => (
@@ -290,6 +335,22 @@ export function AgentRunPanel({
           )}
           {clientError && <div className="mt-2 rounded-lg border border-red-400/20 bg-red-400/5 p-2 font-sans text-[10px] text-red-300">{clientError}</div>}
         </div>
+        {!fullHeight && (
+          <div
+            role="separator"
+            aria-orientation="horizontal"
+            aria-label={t('agentRun.resizePanel')}
+            title={t('agentRun.resizePanel')}
+            onPointerDown={handleResizeStart}
+            onPointerMove={handleResizeMove}
+            onPointerUp={handleResizeEnd}
+            onPointerCancel={handleResizeEnd}
+            className="nodrag nopan nowheel group flex h-3 shrink-0 touch-none cursor-row-resize items-center justify-center border-t border-border/60 bg-surface-900/85"
+          >
+            <span className="h-1 w-10 rounded-full bg-border-hover transition-colors group-hover:bg-accent-400" />
+          </div>
+        )}
+        </>
       )}
     </section>
   );

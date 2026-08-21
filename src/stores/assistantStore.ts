@@ -20,6 +20,11 @@ export interface WorkspaceAssistantState {
   usedSkills: string[];
 }
 
+export interface RetractedAssistantTurn {
+  userMessageId: string;
+  activity: WorkspaceAssistantEvent[];
+}
+
 interface AssistantState {
   workspaces: Record<string, WorkspaceAssistantState>;
   ensureWorkspace: (workspaceId: string) => WorkspaceAssistantState;
@@ -31,6 +36,7 @@ interface AssistantState {
   setRevision: (workspaceId: string, revision: number) => void;
   setUsedSkills: (workspaceId: string, skills: string[]) => void;
   rotateThread: (workspaceId: string, failedThreadId: string) => void;
+  retractLatestTurn: (workspaceId: string) => RetractedAssistantTurn | undefined;
   removeWorkspace: (workspaceId: string) => void;
 }
 
@@ -140,6 +146,39 @@ export const useAssistantStore = create<AssistantState>()(
           },
         };
       }),
+      retractLatestTurn: (workspaceId) => {
+        const workspace = get().workspaces[workspaceId];
+        if (!workspace) return undefined;
+        const userMessageIndex = workspace.messages.findLastIndex((message) => message.role === 'user');
+        if (userMessageIndex < 0) return undefined;
+        const userMessage = workspace.messages[userMessageIndex];
+        const turnStartIndex = workspace.activity.findLastIndex((event) => (
+          event.type === 'turn_started' && event.timestamp >= userMessage.timestamp
+        ));
+        const activityStart = turnStartIndex >= 0 ? turnStartIndex : workspace.activity.length;
+        const retainedActivity = workspace.activity.slice(0, activityStart);
+        const retractedActivity = workspace.activity.slice(activityStart);
+        const retainedSkills = [...new Set(retainedActivity
+          .filter((event) => event.type === 'skill_activated')
+          .map((event) => String(event.payload.name ?? ''))
+          .filter(Boolean))];
+        set((state) => ({
+          workspaces: {
+            ...state.workspaces,
+            [workspaceId]: {
+              ...workspace,
+              threadId: crypto.randomUUID(),
+              historyStartIndex: 0,
+              messages: workspace.messages.slice(0, userMessageIndex),
+              activity: retainedActivity,
+              pendingCommand: undefined,
+              running: false,
+              usedSkills: retainedSkills,
+            },
+          },
+        }));
+        return { userMessageId: userMessage.id, activity: retractedActivity };
+      },
       removeWorkspace: (workspaceId) => set((state) => {
         const { [workspaceId]: _, ...workspaces } = state.workspaces;
         void _;

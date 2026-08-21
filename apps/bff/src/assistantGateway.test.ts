@@ -14,6 +14,19 @@ const input = {
 };
 
 describe('AssistantGateway', () => {
+  it('uses caller cancellation without imposing a fixed total timeout', async () => {
+    const controller = new AbortController();
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response('{}', { status: 200 }))
+      .mockResolvedValueOnce(new Response('', { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const response = await new AssistantGateway('http://agent', 'default').start(input, controller.signal);
+    await response.text();
+
+    expect(fetchMock.mock.calls[1][1].signal).toBe(controller.signal);
+  });
+
   it('rehydrates history only for a newly created LangGraph thread', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(new Response('', { status: 404 }))

@@ -152,6 +152,9 @@
     ,"system": "System"
     ,"copyMessage": "Copy message"
     ,"copiedMessage": "Message copied"
+    ,"thinking": "Thinking…"
+    ,"answering": "Writing answer…"
+    ,"retrying": "Rate limited — retrying…"
   },
   "node": {
     "expand": "Expand",
@@ -205,6 +208,7 @@
     "context": "Context",
     "response": "Agent response",
     "eventLog": "Technical event log",
+    "resizePanel": "Drag to resize the Agent panel",
     "changedFiles": "Changed files ({{count}})",
     "applyAll": "Apply all",
     "rejectAll": "Reject all",
@@ -281,6 +285,12 @@
       "undoLatestSuccess": "Undid the latest canvas operation.",
       "undoAllSuccess": "Undid all {{count}} canvas operations.",
       "undoUnavailable": "Undo is unavailable because the canvas changed or the page was reloaded.",
+      "retractTurn": "Retract turn",
+      "retractTurnConfirm": "Retract your latest message and its result? Any reversible canvas actions from this turn will also be undone.",
+      "retractTurnSuccess": "Retracted the latest conversation turn.",
+      "retractTurnCanvasSuccess": "Retracted the latest turn and undid {{count}} canvas action(s).",
+      "retractTurnPartial": "The conversation was retracted, but some canvas changes could not be safely undone because the canvas changed or the page was reloaded.",
+      "retractTurnUnavailable": "There is no conversation turn to retract.",
       "confirmationRequired": "Confirmation required",
       "approve": "Approve",
       "reject": "Reject",

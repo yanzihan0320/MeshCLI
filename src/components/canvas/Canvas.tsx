@@ -300,6 +300,8 @@ export function Canvas() {
           fitView={false}
           minZoom={0.1}
           maxZoom={2}
+          connectionRadius={36}
+          connectOnClick
           proOptions={{ hideAttribution: true }}
           deleteKeyCode={null}
           selectionKeyCode="Shift"

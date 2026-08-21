@@ -2,6 +2,8 @@ import type { ChatMessage, LLMConfig } from '../../types/chat';
 
 export interface StreamCallbacks {
   onToken: (token: string) => void;
+  onReasoning?: (token: string) => void;
+  onRetry?: (attempt: number, delayMs: number) => void;
   onDone: () => void;
   onError: (error: Error) => void;
 }

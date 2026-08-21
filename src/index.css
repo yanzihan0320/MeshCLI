@@ -238,11 +238,34 @@ a:focus-visible {
 }
 
 .react-flow__resize-control.handle {
-  width: 8px !important;
-  height: 8px !important;
-  border-radius: 2px !important;
+  width: 12px !important;
+  height: 12px !important;
+  border-radius: 3px !important;
   background-color: var(--accent-500) !important;
   border: none !important;
+  z-index: 30 !important;
+}
+
+.react-flow__resize-control.handle::after {
+  content: '';
+  position: absolute;
+  inset: -10px;
+}
+
+.react-flow__handle {
+  z-index: 10;
+  touch-action: none;
+}
+
+.react-flow__handle::after {
+  content: '';
+  position: absolute;
+  inset: -12px;
+  border-radius: 9999px;
+}
+
+.react-flow__handle:hover {
+  box-shadow: 0 0 0 5px var(--selection-ring);
 }
 
 .react-flow__edge-path {

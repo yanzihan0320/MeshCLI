@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import uuid
 from typing import Annotated, Any
 
@@ -15,7 +16,10 @@ from langgraph.types import Command, interrupt
 
 from src.mcp_registry import MCPRegistry, call_filesystem_tool, safe_workspace_path
 
-MAX_MCP_RESULT_CHARS = 40_000
+MAX_MCP_RESULT_CHARS = max(
+    4_000,
+    min(40_000, int(os.getenv("LANGGRAPH_MCP_RESULT_MAX_CHARS", "16000"))),
+)
 
 
 def _writer_event(event_type: str, payload: dict[str, Any]) -> None:
@@ -185,8 +189,8 @@ async def _safe_path(state: dict[str, Any], path: str) -> str:
 
 @tool
 async def workspace_tree(path: str, state: StateArg) -> str:
-    """Read a directory tree from the bound repository through read-only MCP."""
-    return await _mcp(state, "directory_tree", {"path": await _safe_path(state, path)})
+    """List one directory level through read-only MCP. Call again for a relevant subdirectory."""
+    return await _mcp(state, "list_directory", {"path": await _safe_path(state, path)})
 
 
 @tool

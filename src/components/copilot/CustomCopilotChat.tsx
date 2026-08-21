@@ -31,7 +31,7 @@ function activityLabel(event: WorkspaceAssistantEvent, t: TFunction): { title: s
 
 export function CustomCopilotChat({ isOpen, onClose }: CustomCopilotChatProps) {
   const { t } = useTranslation();
-  const { messages, activity, undoHistory, pendingCommand, isRunning, send, abort, decidePending, undo, undoAll } = useAgent();
+  const { messages, activity, undoHistory, pendingCommand, isRunning, send, abort, retractLatestTurn, decidePending, undo, undoAll } = useAgent();
   const [input, setInput] = useState('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [undoFeedback, setUndoFeedback] = useState<string>();
@@ -54,6 +54,9 @@ export function CustomCopilotChat({ isOpen, onClose }: CustomCopilotChatProps) {
     .map((event) => String(event.payload.name ?? ''))
     .filter(Boolean))], [currentTrace]);
   const graphEvent = currentTrace.find((event) => event.type === 'turn_started');
+  const latestUserMessageId = useMemo(() => (
+    [...messages].reverse().find((message) => message.role === 'user')?.id
+  ), [messages]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -85,10 +88,24 @@ export function CustomCopilotChat({ isOpen, onClose }: CustomCopilotChatProps) {
     setTimeout(() => setCopiedId(null), 2000);
   };
 
+  const handleRetractLatestTurn = () => {
+    if (!window.confirm(t('copilot.chat.retractTurnConfirm'))) return;
+    const result = retractLatestTurn();
+    if (!result.removed) {
+      setUndoFeedback(t('copilot.chat.retractTurnUnavailable'));
+    } else if (result.undoneCanvasActionCount < result.canvasActionCount) {
+      setUndoFeedback(t('copilot.chat.retractTurnPartial'));
+    } else if (result.canvasActionCount > 0) {
+      setUndoFeedback(t('copilot.chat.retractTurnCanvasSuccess', { count: result.undoneCanvasActionCount }));
+    } else {
+      setUndoFeedback(t('copilot.chat.retractTurnSuccess'));
+    }
+  };
+
   if (!isOpen) return null;
 
   return (
-    <div className="mesh-panel fixed bottom-3 right-3 top-3 z-50 flex w-[min(520px,calc(100vw-24px))] flex-col overflow-hidden rounded-[22px] max-sm:bottom-0 max-sm:right-0 max-sm:top-0 max-sm:w-full max-sm:rounded-none">
+    <div className="mesh-panel fixed bottom-3 right-3 top-[60px] z-50 flex w-[min(520px,calc(100vw-24px))] flex-col overflow-hidden rounded-[22px] max-sm:bottom-0 max-sm:right-0 max-sm:top-12 max-sm:w-full max-sm:rounded-none">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-border/70 bg-surface-900/65 px-4 py-3.5 backdrop-blur-xl">
         <div className="min-w-0">
@@ -140,6 +157,19 @@ export function CustomCopilotChat({ isOpen, onClose }: CustomCopilotChatProps) {
                   </div>
                 ) : (
                   <p className="whitespace-pre-wrap break-words text-[13px] leading-5">{msg.content}</p>
+                )}
+                {msg.role === 'user' && msg.id === latestUserMessageId && (
+                  <div className="mt-2 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={handleRetractLatestTurn}
+                      className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[10px] text-white/70 transition-colors hover:bg-white/10 hover:text-white"
+                      title={t('copilot.chat.retractTurn')}
+                      aria-label={t('copilot.chat.retractTurn')}
+                    >
+                      <Undo2 size={11} /> {t('copilot.chat.retractTurn')}
+                    </button>
+                  </div>
                 )}
                 {msg.role === 'assistant' && (
                   <div className="flex items-center gap-2 mt-1.5">

@@ -1,4 +1,4 @@
-import type { CanvasCommand, CanvasCommandResult, CanvasSnapshot } from '../../../packages/protocol/src/assistant';
+import { CanvasCommandSchema, type CanvasCommand, type CanvasCommandResult, type CanvasSnapshot, type WorkspaceAssistantEvent } from '../../../packages/protocol/src/assistant';
 import { useAssistantStore } from '../../stores/assistantStore';
 import { useChatStore } from '../../stores/chatStore';
 import { useFlowStore } from '../../stores/flowStore';
@@ -33,6 +33,22 @@ export interface CanvasUndoEntry {
   commandType: CanvasCommand['type'];
   beforeRevision: number;
   afterRevision: number;
+}
+
+export function retractableCanvasActionIds(activity: WorkspaceAssistantEvent[]): string[] {
+  const mutatingCommands = new Set<string>();
+  const applied: string[] = [];
+  for (const event of activity) {
+    if (event.type === 'canvas_command' || event.type === 'permission_required') {
+      const parsed = CanvasCommandSchema.safeParse(event.payload.command);
+      if (parsed.success && parsed.data.risk !== 'read') mutatingCommands.add(parsed.data.actionId);
+      continue;
+    }
+    if (event.type !== 'action_resolved' || event.payload.status !== 'applied') continue;
+    const actionId = String(event.payload.actionId ?? '');
+    if (actionId && mutatingCommands.has(actionId) && !applied.includes(actionId)) applied.push(actionId);
+  }
+  return applied;
 }
 
 export function getCanvasUndoHistory(workspaceId: string): CanvasUndoEntry[] {

@@ -37,33 +37,41 @@ def _model_min_interval_seconds() -> float:
     explicit = os.getenv("LANGGRAPH_MODEL_MIN_INTERVAL_SECONDS")
     if explicit is not None and explicit.strip():
         return max(0.0, float(explicit))
-    endpoint = os.getenv("OPENAI_BASE_URL", "").lower()
-    model = os.getenv("OPENAI_MODEL", "").lower()
-    # Moonshot development accounts commonly allow only 3 requests/minute.
-    return 20.5 if "moonshot" in endpoint or "kimi" in model else 0.0
+    # Provider limits vary by account tier. Do not impose the old development-
+    # account pacing on upgraded accounts; operators can opt into a positive
+    # interval through LANGGRAPH_MODEL_MIN_INTERVAL_SECONDS when needed.
+    return 0.0
+
+
+def _invoke_with_retries(model: Any, messages: list[Any]) -> Any:
+    for attempt in range(4):
+        try:
+            return model.invoke(messages)
+        except Exception as error:
+            detail = str(error)
+            if "429" not in detail and "rate_limit" not in detail.lower():
+                raise
+            if attempt == 3:
+                raise
+            match = re.search(r"after\s+(\d+(?:\.\d+)?)\s+seconds?", detail, re.IGNORECASE)
+            delay = float(match.group(1)) if match else min(8.0, 2.0 ** attempt)
+            time.sleep(max(1.0, delay) + 0.25)
 
 
 def _invoke_with_rate_limit(model: Any, messages: list[Any]) -> Any:
     global _last_model_invoke_at
+    interval = _model_min_interval_seconds()
+    if interval <= 0:
+        # With pacing disabled, allow the provider account's configured
+        # concurrency instead of serializing every LangGraph run globally.
+        return _invoke_with_retries(model, messages)
     with _MODEL_INVOKE_LOCK:
-        interval = _model_min_interval_seconds()
         remaining = interval - (time.monotonic() - _last_model_invoke_at)
         if remaining > 0:
             time.sleep(remaining)
-        for attempt in range(4):
-            try:
-                response = model.invoke(messages)
-                _last_model_invoke_at = time.monotonic()
-                return response
-            except Exception as error:
-                detail = str(error)
-                if "429" not in detail and "rate_limit" not in detail.lower():
-                    raise
-                if attempt == 3:
-                    raise
-                match = re.search(r"after\s+(\d+(?:\.\d+)?)\s+seconds?", detail, re.IGNORECASE)
-                delay = float(match.group(1)) if match else min(8.0, 2.0 ** attempt)
-                time.sleep(max(1.0, delay) + 0.25)
+        response = _invoke_with_retries(model, messages)
+        _last_model_invoke_at = time.monotonic()
+        return response
 
 
 def _get_llm():

@@ -5,6 +5,7 @@ import {
   buildCanvasSnapshot,
   executeCanvasCommand,
   getCanvasUndoHistory,
+  retractableCanvasActionIds,
   undoAllCanvasCommands,
   undoCanvasCommand,
 } from './canvasCommandExecutor';
@@ -12,6 +13,12 @@ import { CanvasCommandSchema, type CanvasCommandResult, type WorkspaceAssistantE
 import { useAssistantStore } from '../../stores/assistantStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useWorkspaceStore } from '../../stores/workspaceStore';
+
+export interface RetractTurnResult {
+  removed: boolean;
+  canvasActionCount: number;
+  undoneCanvasActionCount: number;
+}
 
 export function useAgent() {
   const activeWorkspaceId = useWorkspaceStore((state) => state.activeWorkspaceId);
@@ -137,6 +144,32 @@ export function useAgent() {
     if (activeWorkspaceId) useAssistantStore.getState().setRunning(activeWorkspaceId, false);
   }, [activeWorkspaceId]);
 
+  const retractLatestTurn = useCallback((): RetractTurnResult => {
+    if (!activeWorkspaceId) return { removed: false, canvasActionCount: 0, undoneCanvasActionCount: 0 };
+    const store = useAssistantStore.getState();
+    const state = store.ensureWorkspace(activeWorkspaceId);
+    const latestUser = [...state.messages].reverse().find((message) => message.role === 'user');
+    if (!latestUser) return { removed: false, canvasActionCount: 0, undoneCanvasActionCount: 0 };
+    const turnStart = state.activity.findLastIndex((event) => (
+      event.type === 'turn_started' && event.timestamp >= latestUser.timestamp
+    ));
+    const turnActivity = turnStart >= 0 ? state.activity.slice(turnStart) : [];
+    const actionIds = retractableCanvasActionIds(turnActivity);
+
+    agentClient.abort();
+    let undoneCanvasActionCount = 0;
+    for (const actionId of [...actionIds].reverse()) {
+      if (!undoCanvasCommand(activeWorkspaceId, actionId)) break;
+      undoneCanvasActionCount += 1;
+    }
+    const retracted = store.retractLatestTurn(activeWorkspaceId);
+    return {
+      removed: Boolean(retracted),
+      canvasActionCount: actionIds.length,
+      undoneCanvasActionCount,
+    };
+  }, [activeWorkspaceId]);
+
   return {
     messages: workspace?.messages ?? [],
     activity: workspace?.activity ?? [],
@@ -145,6 +178,7 @@ export function useAgent() {
     isRunning: workspace?.running ?? false,
     send,
     abort,
+    retractLatestTurn,
     decidePending,
     undoHistory: activeWorkspaceId ? getCanvasUndoHistory(activeWorkspaceId) : [],
     undo: () => activeWorkspaceId ? undoCanvasCommand(activeWorkspaceId) : false,

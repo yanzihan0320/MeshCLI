@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { nanoid } from 'nanoid';
-import type { ChatMessage, Conversation, MessageRole } from '../types/chat';
+import type { ChatMessage, ChatStreamStatus, Conversation, MessageRole } from '../types/chat';
 import type { A2UIBlock } from '../../packages/protocol/src/a2ui';
 
 export interface ActiveNodeContext {
@@ -20,6 +20,7 @@ interface ChatState {
     mimeType: string;
   }[], triggeredBy?: string) => string;
   appendToLastMessage: (nodeId: string, chunk: string) => void;
+  setMessageStreamStatus: (nodeId: string, messageId: string, status?: ChatStreamStatus) => void;
   setStreaming: (nodeId: string, streaming: boolean) => void;
   getMessages: (nodeId: string) => ChatMessage[];
   removeConversation: (nodeId: string) => void;
@@ -120,6 +121,24 @@ export const useChatStore = create<ChatState>((set, get) => ({
       conversations: {
         ...get().conversations,
         [nodeId]: { ...conv, messages },
+      },
+    });
+  },
+
+  setMessageStreamStatus: (nodeId, messageId, streamStatus) => {
+    const conv = get().conversations[nodeId];
+    if (!conv) return;
+    const message = conv.messages.find((candidate) => candidate.id === messageId);
+    if (!message || message.streamStatus === streamStatus) return;
+    set({
+      conversations: {
+        ...get().conversations,
+        [nodeId]: {
+          ...conv,
+          messages: conv.messages.map((message) => (
+            message.id === messageId ? { ...message, streamStatus } : message
+          )),
+        },
       },
     });
   },

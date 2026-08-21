@@ -72,6 +72,9 @@ export const ChatMessage = memo(function ChatMessage({
   const translatedCopiedLabel = t('chat.copiedMessage');
   const copyLabel = translatedCopyLabel === 'chat.copyMessage' ? 'Copy message' : translatedCopyLabel;
   const copiedLabel = translatedCopiedLabel === 'chat.copiedMessage' ? 'Copied message' : translatedCopiedLabel;
+  const streamStatusLabel = message.streamStatus
+    ? t(`chat.${message.streamStatus}`)
+    : null;
   const isUser = message.role === 'user';
   const isSystem = message.role === 'system';
   const [copied, setCopied] = useState(false);
@@ -165,6 +168,23 @@ export const ChatMessage = memo(function ChatMessage({
                 );
               })}
               {message.content && <div>{message.content}</div>}
+            </div>
+          ) : message.streamStatus && !message.content ? (
+            <div
+              role="status"
+              aria-live="polite"
+              className="flex min-h-8 items-center gap-2.5 text-sm font-medium text-text-secondary"
+            >
+              <span className="flex items-center gap-1" aria-hidden="true">
+                {[0, 1, 2].map((index) => (
+                  <span
+                    key={index}
+                    className="h-1.5 w-1.5 rounded-full bg-accent-400 animate-pulse"
+                    style={{ animationDelay: `${index * 160}ms` }}
+                  />
+                ))}
+              </span>
+              <span>{streamStatusLabel}</span>
             </div>
           ) : (
           <Markdown

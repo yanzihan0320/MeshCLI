@@ -60,6 +60,7 @@ export function useChatNode(nodeId: string, topic: string, parentNodeId?: string
 
       // Create placeholder assistant message
       const assistantMessageId = store.addMessage(nodeId, 'assistant', '');
+      store.setMessageStreamStatus(nodeId, assistantMessageId, 'thinking');
       store.setStreaming(nodeId, true);
 
       // Cancel previous stream
@@ -71,21 +72,32 @@ export function useChatNode(nodeId: string, topic: string, parentNodeId?: string
         fullMessages,
         {
           onToken: (token) => {
-            useChatStore.getState().appendToLastMessage(nodeId, token);
+            const currentStore = useChatStore.getState();
+            currentStore.setMessageStreamStatus(nodeId, assistantMessageId, 'answering');
+            currentStore.appendToLastMessage(nodeId, token);
+          },
+          onReasoning: () => {
+            useChatStore.getState().setMessageStreamStatus(nodeId, assistantMessageId, 'thinking');
+          },
+          onRetry: () => {
+            useChatStore.getState().setMessageStreamStatus(nodeId, assistantMessageId, 'retrying');
           },
           onDone: () => {
             const currentStore = useChatStore.getState();
+            currentStore.setMessageStreamStatus(nodeId, assistantMessageId, undefined);
             const answer = currentStore.getMessages(nodeId).find((message) => message.id === assistantMessageId)?.content ?? '';
             const presentation = deriveExplanationPresentation(answer, topic);
             currentStore.setMessagePresentation(nodeId, assistantMessageId, presentation.content, presentation.blocks);
             currentStore.setStreaming(nodeId, false);
           },
           onError: (error) => {
-            useChatStore.getState().appendToLastMessage(
+            const currentStore = useChatStore.getState();
+            currentStore.setMessageStreamStatus(nodeId, assistantMessageId, undefined);
+            currentStore.appendToLastMessage(
               nodeId,
               `\n\n**Error:** ${error.message}`
             );
-            useChatStore.getState().setStreaming(nodeId, false);
+            currentStore.setStreaming(nodeId, false);
           },
         },
         controller.signal
@@ -96,7 +108,12 @@ export function useChatNode(nodeId: string, topic: string, parentNodeId?: string
 
   const cancelStream = useCallback(() => {
     abortRef.current?.abort();
-    useChatStore.getState().setStreaming(nodeId, false);
+    const store = useChatStore.getState();
+    const assistantMessage = store.getMessages(nodeId).at(-1);
+    if (assistantMessage?.role === 'assistant') {
+      store.setMessageStreamStatus(nodeId, assistantMessage.id, undefined);
+    }
+    store.setStreaming(nodeId, false);
   }, [nodeId]);
 
   return { sendMessage, cancelStream };

@@ -1,6 +1,6 @@
 """Tests for the MeshCLI LangGraph runtime."""
 
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from langchain_core.messages import AIMessage, HumanMessage
 
@@ -46,3 +46,34 @@ class TestGetLlm:
         with patch("langchain_anthropic.ChatAnthropic", autospec=True) as cls:
             result = _get_llm()
         assert result is cls.return_value
+
+
+class TestModelPacing:
+    def test_default_interval_does_not_throttle_kimi(self, monkeypatch):
+        monkeypatch.delenv("LANGGRAPH_MODEL_MIN_INTERVAL_SECONDS", raising=False)
+        monkeypatch.setenv("OPENAI_BASE_URL", "https://api.moonshot.cn/v1")
+        monkeypatch.setenv("OPENAI_MODEL", "kimi-k3")
+        from src.runtime import _model_min_interval_seconds
+        assert _model_min_interval_seconds() == 0.0
+
+    def test_explicit_interval_is_preserved(self, monkeypatch):
+        monkeypatch.setenv("LANGGRAPH_MODEL_MIN_INTERVAL_SECONDS", "2.5")
+        from src.runtime import _model_min_interval_seconds
+        assert _model_min_interval_seconds() == 2.5
+
+    def test_zero_interval_does_not_take_global_lock(self, monkeypatch):
+        monkeypatch.setenv("LANGGRAPH_MODEL_MIN_INTERVAL_SECONDS", "0")
+        model = Mock()
+        model.invoke.return_value = "ok"
+
+        class FailingLock:
+            def __enter__(self):
+                raise AssertionError("zero pacing must not serialize model calls")
+
+            def __exit__(self, *_args):
+                return False
+
+        from src import runtime
+        monkeypatch.setattr(runtime, "_MODEL_INVOKE_LOCK", FailingLock())
+        assert runtime._invoke_with_rate_limit(model, ["hello"]) == "ok"
+        model.invoke.assert_called_once_with(["hello"])

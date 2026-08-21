@@ -1,6 +1,7 @@
 import type { A2UIBlock } from '../../packages/protocol/src/a2ui';
 
 export type MessageRole = 'user' | 'assistant' | 'system';
+export type ChatStreamStatus = 'thinking' | 'answering' | 'retrying';
 
 export interface ChatMessage {
   id: string;
@@ -13,6 +14,7 @@ export interface ChatMessage {
   }[];
   triggeredBy?: string;
   blocks?: A2UIBlock[];
+  streamStatus?: ChatStreamStatus;
 }
 
 export interface Conversation {

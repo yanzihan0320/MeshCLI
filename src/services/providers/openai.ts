@@ -1,6 +1,7 @@
 import type { LLMProvider, StreamCallbacks } from './types';
 import type { ChatMessage, LLMConfig } from '../../types/chat';
 import { providerResponseError } from './errors';
+import { fetchWithRateLimitRetry } from './rateLimitRetry';
 
 function toOpenAIMessages(messages: ChatMessage[]) {
   return messages.map((m, index) => {
@@ -51,21 +52,20 @@ export const OpenAIProvider: LLMProvider = {
     const body = {
       model: config.model,
       messages: toOpenAIMessages(messages),
-      temperature: config.temperature,
+      temperature: /^kimi-k3(?:$|-)/i.test(config.model) ? 1 : config.temperature,
       max_completion_tokens: config.maxTokens,
       stream: true,
     };
 
     try {
-      const response = await fetch('/api/llm', {
+      const response = await fetchWithRateLimitRetry('/api/llm', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'x-llm-provider': 'openai',
         },
         body: JSON.stringify(body),
-        signal,
-      });
+      }, callbacks, signal);
 
       if (!response.ok) {
         throw await providerResponseError(response);
@@ -96,7 +96,12 @@ export const OpenAIProvider: LLMProvider = {
           }
           try {
             const parsed = JSON.parse(data);
-            const content = parsed.choices?.[0]?.delta?.content;
+            const delta = parsed.choices?.[0]?.delta;
+            const reasoning = delta?.reasoning_content;
+            const content = delta?.content;
+            if (typeof reasoning === 'string' && reasoning) {
+              callbacks.onReasoning?.(reasoning);
+            }
             if (content) {
               callbacks.onToken(content);
             }

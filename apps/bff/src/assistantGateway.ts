@@ -87,7 +87,10 @@ export class AssistantGateway {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(requestBody),
-      signal: AbortSignal.any([signal, AbortSignal.timeout(180_000)]),
+      // A workspace turn may legitimately span several model and MCP rounds.
+      // Keep caller-driven cancellation (Stop/navigation), but do not abort a
+      // healthy run merely because its total wall time exceeds three minutes.
+      signal,
     });
     if (!upstream.ok || !upstream.body) {
       const detail = await upstream.text().catch(() => '');

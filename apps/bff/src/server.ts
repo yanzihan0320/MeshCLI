@@ -222,7 +222,11 @@ app.post('/api/llm', async (c) => {
     return c.json({ error: 'Invalid JSON request body.' }, 400);
   }
 
-  const serializedBody = JSON.stringify({ ...requestBody, model: cfg.model });
+  const serializedBody = JSON.stringify({
+    ...requestBody,
+    model: cfg.model,
+    ...(/^kimi-k3(?:$|-)/i.test(cfg.model) ? { temperature: 1 } : {}),
+  });
   if (Buffer.byteLength(serializedBody, 'utf8') > MAX_LLM_BODY_BYTES) {
     return c.json({ error: 'LLM request body is too large.' }, 413);
   }
