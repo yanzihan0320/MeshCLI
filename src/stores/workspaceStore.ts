@@ -8,9 +8,30 @@ interface WorkspaceState {
   createWorkspace: (name?: string) => string;
   switchWorkspace: (id: string) => void;
   renameWorkspace: (id: string, name: string) => void;
-  deleteWorkspace: (id: string) => void;
+  deleteWorkspace: (id: string, replacementName?: string) => void;
   setDefaultAgentModel: (id: string, modelId?: string) => void;
   getActiveWorkspace: () => WorkspaceMetadata | undefined;
+}
+
+/**
+ * `crypto.randomUUID()` is unavailable in some browsers when MeshCLI is opened
+ * from a LAN/non-secure HTTP origin. Keep workspace IDs UUID-shaped for
+ * LangGraph, but generate them without depending on that API.
+ */
+function createWorkspaceId(): string {
+  const bytes = new Uint8Array(16);
+  if (globalThis.crypto?.getRandomValues) {
+    globalThis.crypto.getRandomValues(bytes);
+  } else {
+    for (let index = 0; index < bytes.length; index += 1) {
+      bytes[index] = Math.floor(Math.random() * 256);
+    }
+  }
+
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = Array.from(bytes, (value) => value.toString(16).padStart(2, '0'));
+  return `${hex.slice(0, 4).join('')}-${hex.slice(4, 6).join('')}-${hex.slice(6, 8).join('')}-${hex.slice(8, 10).join('')}-${hex.slice(10).join('')}`;
 }
 
 export const useWorkspaceStore = create<WorkspaceState>()(
@@ -20,7 +41,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       activeWorkspaceId: null,
 
       createWorkspace: (name?: string) => {
-        const id = crypto.randomUUID();
+        const id = createWorkspaceId();
         const now = Date.now();
         const metadata: WorkspaceMetadata = {
           id,
@@ -49,7 +70,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         });
       },
 
-      deleteWorkspace: (id: string) => {
+      deleteWorkspace: (id: string, replacementName?: string) => {
         const { workspaces, activeWorkspaceId } = get();
         const remaining = workspaces.filter((w) => w.id !== id);
 
@@ -58,10 +79,10 @@ export const useWorkspaceStore = create<WorkspaceState>()(
 
         if (remaining.length === 0) {
           // No workspaces left — create a new default
-          const newId = crypto.randomUUID();
+          const newId = createWorkspaceId();
           const now = Date.now();
           set({
-            workspaces: [{ id: newId, name: 'My Workspace', createdAt: now, updatedAt: now }],
+            workspaces: [{ id: newId, name: replacementName ?? 'My Workspace', createdAt: now, updatedAt: now }],
             activeWorkspaceId: newId,
           });
         } else {

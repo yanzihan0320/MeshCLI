@@ -93,18 +93,17 @@ export function CanvasControls() {
 
   const ThemeIcon = theme === 'light' ? Sun : theme === 'dark' ? Moon : Monitor;
 
-  const btnClass =
-    'p-2 rounded-lg bg-surface-900 border border-neutral-700/50 text-neutral-400 hover:text-neutral-200 hover:bg-surface-800 transition-colors';
+  const btnClass = 'mesh-icon-button';
 
   return (
     <>
-      <div className="absolute top-4 left-4 z-10 flex flex-col gap-1.5">
+      <div className="absolute left-4 top-4 z-10 flex flex-col gap-1.5 rounded-[14px] border border-border/80 bg-surface-900/70 p-1.5 shadow-[0_12px_36px_rgba(0,0,0,0.14)] backdrop-blur-xl">
         <Tooltip content={t('canvas.newChat')}>
           <button onClick={handleNewNode} className={btnClass}>
             <Plus size={18} />
           </button>
         </Tooltip>
-        <div className="h-px bg-border my-0.5" />
+        <div className="mx-1 my-0.5 h-px bg-border" />
         <Tooltip content={t('canvas.zoomIn')}>
           <button onClick={() => zoomIn()} className={btnClass}>
             <ZoomIn size={18} />
@@ -125,7 +124,7 @@ export function CanvasControls() {
             <Network size={18} />
           </button>
         </Tooltip>
-        <div className="h-px bg-border my-0.5" />
+        <div className="mx-1 my-0.5 h-px bg-border" />
         <Tooltip content={t(`settings.theme${theme.charAt(0).toUpperCase() + theme.slice(1)}`)}>
           <button onClick={handleThemeToggle} className={btnClass}>
             <ThemeIcon size={18} />

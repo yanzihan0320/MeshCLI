@@ -10,7 +10,7 @@ export function ChecklistBlock({ block, onChange }: ChecklistBlockProps) {
   const completed = block.items.filter((item) => item.checked).length;
 
   return (
-    <section className="overflow-hidden rounded-xl border border-border bg-surface-900 shadow-sm">
+    <section className="overflow-hidden rounded-2xl border border-border/70 bg-surface-900 shadow-sm">
       <header className="flex items-center justify-between gap-3 border-b border-border bg-surface-800 px-3 py-2">
         <h3 className="text-xs font-semibold text-text-primary">{block.title}</h3>
         <span className="text-[10px] text-text-muted">{completed}/{block.items.length}</span>

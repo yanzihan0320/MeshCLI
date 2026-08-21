@@ -3,9 +3,9 @@ import type { ComparisonTableBlock as ComparisonTableBlockData } from '../../../
 
 export function ComparisonTableBlock({ block }: { block: ComparisonTableBlockData }) {
   return (
-    <section className="overflow-hidden rounded-xl border border-border bg-surface-900 shadow-sm">
+    <section className="overflow-hidden rounded-2xl border border-border/70 bg-surface-900 shadow-sm">
       <header className="flex items-center gap-2 border-b border-border bg-surface-800 px-3 py-2">
-        <Columns3 size={15} className="text-sky-400" />
+        <Columns3 size={15} className="text-accent-400" />
         <h3 className="text-xs font-semibold text-text-primary">{block.title}</h3>
       </header>
       <div className="nowheel overflow-x-auto">

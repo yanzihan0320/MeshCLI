@@ -34,7 +34,7 @@ export function TopicEdge({
         id={id}
         path={edgePath}
         style={{
-          stroke: selected ? '#818cf8' : '#404040',
+          stroke: selected ? 'var(--accent-400)' : 'var(--border-hover)',
           strokeWidth: selected ? 2 : 1.5,
           transition: 'stroke 0.2s',
         }}

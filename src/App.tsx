@@ -33,8 +33,10 @@ function AppInner() {
       {/* Chat Toggle Button */}
       <button
         onClick={() => setShowChat(!showChat)}
-        className="fixed bottom-6 right-6 z-40 p-4 rounded-full bg-accent-500 text-white shadow-lg hover:bg-accent-600 transition-all hover:scale-105"
+        className={`fixed bottom-5 right-5 z-40 flex h-12 w-12 items-center justify-center rounded-2xl border text-white shadow-[0_14px_38px_rgba(63,127,232,0.24)] transition-all duration-200 hover:-translate-y-0.5 ${showChat ? 'border-border bg-surface-800 text-text-primary' : 'border-white/15 bg-accent-500 hover:bg-accent-600'}`}
         title={showChat ? t('copilot.chat.chatToggleCloseLabel') : t('copilot.chat.chatToggleOpenLabel')}
+        aria-label={showChat ? t('copilot.chat.chatToggleCloseLabel') : t('copilot.chat.chatToggleOpenLabel')}
+        aria-expanded={showChat}
       >
         <svg
           width="24"

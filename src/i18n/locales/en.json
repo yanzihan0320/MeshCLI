@@ -5,6 +5,7 @@
     "themeLight": "Light",
     "themeDark": "Dark",
     "themeSystem": "System",
+    "language": "Language",
     "llmProvider": "LLM Provider",
     "nodeChatProvider": "Node chat provider",
     "assistantProvider": "MeshCLI Assistant provider",
@@ -103,13 +104,22 @@
     "exploreMockMode": "Explore Mock Mode"
   },
   "workspace": {
-    "defaultName": "Workspace",
+    "defaultName": "My Workspace",
+    "newWorkspaceName": "New Workspace",
+    "importedWorkspace": "Imported Workspace",
+    "invalidFileFormat": "Invalid workspace file format",
+    "createFailed": "Unable to create a workspace. Please refresh and try again.",
+    "workspaceList": "Workspaces",
+    "workspaceCount": "{{count}} total",
     "newWorkspace": "New Workspace",
     "renameWorkspace": "Rename workspace",
     "deleteWorkspace": "Delete workspace",
     "exportWorkspace": "Export Workspace (JSON)",
     "exportMarkdown": "Export as Markdown",
     "importWorkspace": "Import Workspace",
+    "bindRepository": "Bind Git repository",
+    "selectingRepository": "Selecting…",
+    "folderPickerFallback": "The folder picker failed: {{message}}\n\nEnter an absolute path inside a Git repository:",
     "github": "View on GitHub"
   },
   "canvas": {
@@ -138,6 +148,10 @@
     "askQuestionToStart": "Ask a question to start exploring",
     "attachImage": "Attach image",
     "imagesNotSupported": "Images not supported by provider"
+    ,"removeAttachment": "Remove attachment {{name}}"
+    ,"system": "System"
+    ,"copyMessage": "Copy message"
+    ,"copiedMessage": "Message copied"
   },
   "node": {
     "expand": "Expand",
@@ -149,6 +163,7 @@
     "addLabelAndColor": "Add label and color",
     "addLabel": "Add label...",
     "clear": "Clear",
+    "untitled": "Untitled node",
     "close": "Close"
   },
   "selection": {
@@ -196,6 +211,27 @@
     "viewDiff": "View diff",
     "diffTruncated": "UI truncated",
     "noChanges": "No file changes",
+    "referenceCount": "{{count}} references",
+    "saveWorkspaceDefault": "Save as workspace default model",
+    "executionFlow": "Agent execution flow",
+    "stepPlan": "Plan",
+    "stepExecute": "Execute",
+    "stepReview": "Review",
+    "stepApply": "Apply",
+    "metricEvents": "Events",
+    "metricCommands": "Commands",
+    "metricFiles": "Files",
+    "readOnlyComplete": "Read-only complete",
+    "readOnlyAnalysisComplete": "Read-only analysis complete",
+    "readOnlyAnalysisDescription": "No repository files changed, so there is nothing to apply or undo in code.",
+    "undoCodeApply": "Undo code apply",
+    "undoAvailableUntil": "Code undo is available until {{time}}",
+    "supervisor": "supervisor",
+    "fallback": "fallback",
+    "executor": "executor",
+    "used": "used",
+    "available": "available",
+    "mcpAvailableDescription": "Available to the LangGraph supervisor; it may not have been called in this run.",
     "status": {
       "queued": "Queued",
       "preparing": "Preparing workspace",
@@ -214,6 +250,9 @@
   "chart": {
     "noData": "No chart data provided."
   },
+  "a2ui": {
+    "noTasks": "No tasks"
+  },
   "copilot": {
     "nodesAvailable": "{{count}} canvas nodes are available to Copilot",
     "chat": {
@@ -222,6 +261,29 @@
       "welcomeMessageText": "How can I help you today?",
       "chatInputPlaceholder": "Type a message...",
       "chatDisclaimerText": "AI can make mistakes. Please verify important information.",
+      "orchestrationSubtitle": "Canvas tools · Skills · MCP orchestration",
+      "workspaceAssistant": "Workspace assistant",
+      "executionTrace": "Current run",
+      "eventCount": "{{count}} events",
+      "traceLangGraphStarted": "LangGraph started",
+      "traceSkillActivated": "Skill activated",
+      "traceMcpCall": "MCP call",
+      "traceMcpCompleted": "MCP completed",
+      "traceMcpFailed": "MCP failed",
+      "traceCanvasCommand": "Canvas action",
+      "traceCanvasResult": "Canvas result",
+      "traceToolStarted": "Tool started",
+      "traceToolCompleted": "Tool completed",
+      "canvasUndoHistory": "Canvas undo history",
+      "reversibleOperationCount": "{{count}} reversible operations in this page session",
+      "undoLast": "Undo last",
+      "undoAll": "Undo all ({{count}})",
+      "undoLatestSuccess": "Undid the latest canvas operation.",
+      "undoAllSuccess": "Undid all {{count}} canvas operations.",
+      "undoUnavailable": "Undo is unavailable because the canvas changed or the page was reloaded.",
+      "confirmationRequired": "Confirmation required",
+      "approve": "Approve",
+      "reject": "Reject",
       "chatToggleOpenLabel": "Open chat",
       "chatToggleCloseLabel": "Close chat",
       "assistantMessageToolbarCopyMessageLabel": "Copy",

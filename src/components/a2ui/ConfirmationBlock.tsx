@@ -24,7 +24,7 @@ export function ConfirmationBlock({ block, busy = false, onAction }: Confirmatio
   const resolved = block.status !== 'pending';
 
   return (
-    <section className="overflow-hidden rounded-xl border border-border bg-surface-900 shadow-sm">
+    <section className="overflow-hidden rounded-2xl border border-border/70 bg-surface-900 shadow-sm">
       <header className="flex items-center gap-2 border-b border-border bg-surface-800 px-3 py-2">
         {block.riskLevel === 'low'
           ? <ShieldCheck size={15} className="text-green-400" />

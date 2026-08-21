@@ -9,11 +9,11 @@ export function DiffReviewBlock({ block }: DiffReviewBlockProps) {
   const { changeSet } = block;
 
   return (
-    <section className="overflow-hidden rounded-xl border border-border bg-surface-900 shadow-sm">
+    <section className="overflow-hidden rounded-2xl border border-border/70 bg-surface-900 shadow-sm">
       <header className="flex items-center gap-2 border-b border-border bg-surface-800 px-3 py-2">
         <FileDiff size={15} className="text-accent-400" />
         <h3 className="min-w-0 flex-1 text-xs font-semibold text-text-primary">{block.title}</h3>
-        <span className="text-[9px] uppercase text-text-muted">{block.status}</span>
+        <span className="text-[10px] font-medium uppercase text-text-muted">{block.status}</span>
       </header>
       <div className="space-y-1 px-3 py-2">
         {changeSet.files.length === 0 && <p className="text-[10px] text-text-muted">No file changes</p>}
@@ -29,7 +29,7 @@ export function DiffReviewBlock({ block }: DiffReviewBlockProps) {
           <summary className="cursor-pointer px-2 py-1.5 text-[10px] text-text-secondary">
             View unified diff{changeSet.truncated ? ' · UI truncated' : ''}
           </summary>
-          <pre className="nowheel max-h-64 overflow-auto border-t border-border/70 p-2 font-mono text-[9px] leading-relaxed text-text-secondary">
+          <pre className="nowheel max-h-64 overflow-auto border-t border-border/70 p-2.5 font-mono text-[10px] leading-relaxed text-text-secondary">
             {changeSet.diff || 'No file changes'}
           </pre>
         </details>

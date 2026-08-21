@@ -4,6 +4,7 @@ import {
   Box, Sparkles, Database, CheckCircle2, FileCheck2,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { AgentEvent, AgentRunRecord } from '../../../packages/protocol/src/agent';
@@ -46,7 +47,7 @@ function eventDetail(event: AgentEvent): string {
   return String(event.payload.message ?? event.payload.adapter ?? '');
 }
 
-function runVisualizationBlocks(run: AgentRunRecord): A2UIBlock[] {
+function runVisualizationBlocks(run: AgentRunRecord, t: TFunction): A2UIBlock[] {
   const terminalError = run.status === 'failed' || run.status === 'conflicted' || run.status === 'rejected';
   const planSeen = run.events.some((event) => event.type === 'plan_updated');
   const executionSeen = run.events.some((event) => ['tool_started', 'command_started', 'file_changed', 'change_set_created'].includes(event.type));
@@ -63,13 +64,13 @@ function runVisualizationBlocks(run: AgentRunRecord): A2UIBlock[] {
       version: 1,
       id: `agent-progress-${run.runId}`,
       type: 'process_timeline',
-      title: 'Agent execution flow',
+      title: t('agentRun.executionFlow'),
       fallbackText: `Agent run ${run.status}`,
       steps: [
-        { id: 'plan', label: 'Plan', status: stepStatus(planSeen || executionSeen || reviewSeen, !planSeen && !executionSeen && !reviewSeen) },
-        { id: 'execute', label: 'Execute', status: stepStatus(reviewSeen, !reviewSeen && (planSeen || executionSeen), run.status === 'failed') },
-        { id: 'review', label: 'Review', status: stepStatus(applied, reviewSeen && !applied && !terminalError, run.status === 'conflicted' || run.status === 'rejected') },
-        { id: 'apply', label: 'Apply', status: stepStatus(applied, run.status === 'applying', terminalError) },
+        { id: 'plan', label: t('agentRun.stepPlan'), status: stepStatus(planSeen || executionSeen || reviewSeen, !planSeen && !executionSeen && !reviewSeen) },
+        { id: 'execute', label: t('agentRun.stepExecute'), status: stepStatus(reviewSeen, !reviewSeen && (planSeen || executionSeen), run.status === 'failed') },
+        { id: 'review', label: t('agentRun.stepReview'), status: stepStatus(applied, reviewSeen && !applied && !terminalError, run.status === 'conflicted' || run.status === 'rejected') },
+        { id: 'apply', label: t('agentRun.stepApply'), status: stepStatus(applied, run.status === 'applying', terminalError) },
       ],
     },
     {
@@ -78,9 +79,9 @@ function runVisualizationBlocks(run: AgentRunRecord): A2UIBlock[] {
       type: 'metric_cards',
       fallbackText: `${run.events.length} events, ${commandCount} commands, ${fileCount} files`,
       metrics: [
-        { id: 'events', label: 'Events', value: String(run.events.length), tone: 'info' },
-        { id: 'commands', label: 'Commands', value: String(commandCount), tone: commandCount ? 'warning' : 'neutral' },
-        { id: 'files', label: 'Files', value: String(fileCount), tone: fileCount ? 'success' : 'neutral' },
+        { id: 'events', label: t('agentRun.metricEvents'), value: String(run.events.length), tone: 'info' },
+        { id: 'commands', label: t('agentRun.metricCommands'), value: String(commandCount), tone: commandCount ? 'warning' : 'neutral' },
+        { id: 'files', label: t('agentRun.metricFiles'), value: String(fileCount), tone: fileCount ? 'success' : 'neutral' },
       ],
     },
   ]);
@@ -114,14 +115,14 @@ export function AgentRunPanel({
   }, [run]);
   const visibleBlocks = useMemo(() => {
     if (!run) return [];
-    const processBlocks = runVisualizationBlocks(run);
+    const processBlocks = runVisualizationBlocks(run, t);
     if (run.blocks?.length) return [...processBlocks, ...run.blocks];
     if (!run.changeSet) return processBlocks;
     const status = run.status === 'applied' || run.status === 'reverted' || run.status === 'rejected' || run.status === 'conflicted'
       ? run.status
       : 'pending';
     return [...processBlocks, ...createChangeSetReviewBlocks(run.changeSet, status)];
-  }, [run]);
+  }, [run, t]);
   const expanded = fullHeight || (run ? collapsedRunId !== run.runId : emptyPanelExpanded);
   const appliedEvent = run?.events.findLast((event) => event.type === 'patch_applied');
   const supervisorEvent = run?.events.findLast((event) => (
@@ -167,30 +168,30 @@ export function AgentRunPanel({
   };
 
   return (
-    <section className={`nodrag nopan border-b border-border bg-surface-900 ${fullHeight ? 'flex min-h-0 flex-1 flex-col' : ''}`}>
-      <div className="flex items-center gap-2 px-2.5 py-2">
+    <section className={`nodrag nopan border-b border-border/70 bg-surface-900/72 ${fullHeight ? 'flex min-h-0 flex-1 flex-col' : ''}`}>
+      <div className="flex items-center gap-2 px-3 py-2.5">
         <button
           type="button"
           onClick={fullHeight ? undefined : toggleExpanded}
-          className="flex min-w-0 flex-1 items-center gap-1.5 text-left text-[11px] text-text-secondary hover:text-text-primary"
+          className="flex min-w-0 flex-1 items-center gap-1.5 text-left text-xs text-text-secondary transition-colors hover:text-text-primary"
           aria-expanded={expanded}
         >
           {expanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
           <Terminal size={13} className="text-accent-400" />
           <span className="font-medium">{t('agentRun.title')}</span>
-          {run && <span className={`rounded-full px-2 py-0.5 text-[9px] ${
+          {run && <span className={`rounded-full px-2 py-0.5 text-[10px] ${
             run.status === 'failed' || run.status === 'conflicted'
               ? 'bg-red-400/10 text-red-300'
               : readOnlyComplete || run.status === 'applied' || run.status === 'reverted'
                 ? 'bg-emerald-400/10 text-emerald-300'
-                : isRunning ? 'bg-blue-400/10 text-blue-300' : 'bg-surface-800 text-text-muted'
-          }`}>{readOnlyComplete ? '只读完成' : t(`agentRun.status.${run.status}`)}</span>}
+                : isRunning ? 'bg-accent-500/10 text-accent-400' : 'bg-surface-800 text-text-muted'
+          }`}>{readOnlyComplete ? t('agentRun.readOnlyComplete') : t(`agentRun.status.${run.status}`)}</span>}
         </button>
         {isRunning && (
           <button
             type="button"
             onClick={onCancel}
-            className="flex items-center gap-1 rounded-md bg-red-500/15 px-2 py-1 text-[10px] font-medium text-red-400 hover:bg-red-500/25"
+            className="flex items-center gap-1 rounded-lg border border-red-500/15 bg-red-500/10 px-2.5 py-1.5 text-[11px] font-medium text-red-400 transition-colors hover:bg-red-500/20"
           >
             <Square size={11} /> {t('agentRun.stop')}
           </button>
@@ -200,38 +201,38 @@ export function AgentRunPanel({
             type="button"
             onClick={() => onUndo(run?.changeSet?.changeSetId)}
             disabled={isReviewing}
-            className="flex items-center gap-1 rounded-md bg-amber-500/15 px-2 py-1 text-[10px] font-medium text-amber-300 hover:bg-amber-500/25 disabled:opacity-40"
-            title={`Undo available until ${new Date(undoExpiresAt).toLocaleString()}`}
+            className="flex items-center gap-1 rounded-lg border border-amber-500/15 bg-amber-500/10 px-2.5 py-1.5 text-[11px] font-medium text-amber-400 transition-colors hover:bg-amber-500/20 disabled:opacity-40"
+            title={t('agentRun.undoAvailableUntil', { time: new Date(undoExpiresAt).toLocaleString() })}
           >
-            <RotateCcw size={11} /> Undo{Number.isFinite(undoRemainingMs) ? ` · ${undoRemainingHours}h` : ''}
+            <RotateCcw size={11} /> {t('agentRun.undoCodeApply')}{Number.isFinite(undoRemainingMs) ? ` · ${undoRemainingHours}h` : ''}
           </button>
         )}
       </div>
 
       {expanded && (
-        <div className={`nowheel overflow-y-auto border-t border-border/70 bg-surface-950 px-2.5 py-2 ${fullHeight ? 'min-h-0 flex-1' : 'max-h-80'}`}>
+        <div className={`nowheel overflow-y-auto border-t border-border/70 bg-surface-950/55 px-3 py-3 ${fullHeight ? 'min-h-0 flex-1' : 'max-h-80'}`}>
           {run && (
-            <section className="mb-2.5 rounded-xl border border-border bg-surface-900/80 p-2.5 font-sans">
+            <section className="mb-3 rounded-2xl border border-border/70 bg-surface-900/72 p-3 font-sans">
               <div className="flex flex-wrap gap-1.5">
-                <span className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[9px] ${usedFallback ? 'bg-amber-400/10 text-amber-300' : 'bg-violet-400/10 text-violet-300'}`}>
-                  <Network size={10} /> LangGraph {usedFallback ? 'fallback' : 'supervisor'}
+                <span className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[9px] ${usedFallback ? 'bg-amber-400/10 text-amber-400' : 'bg-accent-500/10 text-accent-400'}`}>
+                  <Network size={10} /> LangGraph · {usedFallback ? t('agentRun.fallback') : t('agentRun.supervisor')}
                 </span>
-                <span className="inline-flex items-center gap-1 rounded-full bg-blue-400/10 px-2 py-1 text-[9px] text-blue-300">
-                  <Box size={10} /> OpenHands executor
+                <span className="inline-flex items-center gap-1 rounded-full bg-accent-500/10 px-2 py-1 text-[9px] text-accent-400">
+                  <Box size={10} /> OpenHands · {t('agentRun.executor')}
                 </span>
                 {activatedSkills.map((skill) => (
-                  <span key={`${skill.name}-${skill.source}`} className="inline-flex items-center gap-1 rounded-full bg-fuchsia-400/10 px-2 py-1 text-[9px] text-fuchsia-300" title={skill.source}>
+                  <span key={`${skill.name}-${skill.source}`} className="inline-flex items-center gap-1 rounded-full border border-border/70 bg-surface-800 px-2 py-1 text-[9px] text-text-secondary" title={skill.source}>
                     <Sparkles size={10} /> Skill · {skill.name}
                   </span>
                 ))}
                 {usedMcpCalls.map((call) => (
-                  <span key={`${call.serverId}-${call.tool}`} className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[9px] ${call.status === 'failed' ? 'bg-red-400/10 text-red-300' : 'bg-cyan-400/10 text-cyan-300'}`}>
-                    <Database size={10} /> MCP used · {call.serverId}/{call.tool}
+                  <span key={`${call.serverId}-${call.tool}`} className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[9px] ${call.status === 'failed' ? 'bg-red-400/10 text-red-400' : 'border border-border/70 bg-surface-800 text-text-secondary'}`}>
+                    <Database size={10} /> MCP · {t('agentRun.used')} · {call.serverId}/{call.tool}
                   </span>
                 ))}
                 {usedMcpCalls.length === 0 && availableMcpServers.map((server) => (
-                  <span key={server} className="inline-flex items-center gap-1 rounded-full bg-cyan-400/10 px-2 py-1 text-[9px] text-cyan-300" title="Available to the LangGraph supervisor; not necessarily called by OpenHands">
-                    <Database size={10} /> MCP available · {server}
+                  <span key={server} className="inline-flex items-center gap-1 rounded-full border border-border/70 bg-surface-800 px-2 py-1 text-[9px] text-text-secondary" title={t('agentRun.mcpAvailableDescription')}>
+                    <Database size={10} /> MCP · {t('agentRun.available')} · {server}
                   </span>
                 ))}
               </div>
@@ -239,19 +240,19 @@ export function AgentRunPanel({
           )}
 
           {readOnlyComplete && (
-            <div className="mb-2.5 flex items-start gap-2 rounded-xl border border-emerald-400/20 bg-emerald-400/5 p-2.5 font-sans">
+            <div className="mb-3 flex items-start gap-2 rounded-2xl border border-emerald-400/20 bg-emerald-400/5 p-3 font-sans">
               <FileCheck2 size={15} className="mt-0.5 shrink-0 text-emerald-300" />
               <div>
-                <p className="text-[11px] font-medium text-emerald-200">只读分析完成</p>
-                <p className="mt-0.5 text-[10px] leading-4 text-text-muted">没有修改仓库文件，因此无需 Apply，也没有可执行的文件 Undo。</p>
+                <p className="text-xs font-medium text-emerald-400">{t('agentRun.readOnlyAnalysisComplete')}</p>
+                <p className="mt-0.5 text-[11px] leading-4 text-text-muted">{t('agentRun.readOnlyAnalysisDescription')}</p>
               </div>
             </div>
           )}
 
           {responseText && (
-            <section className="mb-2.5 rounded-xl border border-border bg-surface-900 p-3 font-sans">
-              <h3 className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold text-text-primary"><CheckCircle2 size={13} className="text-emerald-300" />{t('agentRun.response')}</h3>
-              <div className="prose prose-sm max-w-none text-[11px] leading-5 text-text-secondary prose-headings:text-text-primary prose-strong:text-text-primary prose-code:rounded prose-code:bg-surface-800 prose-code:px-1 prose-code:text-accent-300 prose-li:my-0.5 prose-p:my-1.5">
+            <section className="mb-3 rounded-2xl border border-border/70 bg-surface-900 p-3.5 font-sans">
+              <h3 className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-text-primary"><CheckCircle2 size={13} className="text-emerald-400" />{t('agentRun.response')}</h3>
+              <div className="prose prose-sm max-w-none text-xs leading-5 text-text-secondary prose-headings:text-text-primary prose-strong:text-text-primary prose-code:rounded-md prose-code:bg-surface-800 prose-code:px-1.5 prose-code:text-accent-400 prose-li:my-0.5 prose-p:my-1.5">
                 <Markdown remarkPlugins={[remarkGfm]}>{responseText}</Markdown>
               </div>
             </section>

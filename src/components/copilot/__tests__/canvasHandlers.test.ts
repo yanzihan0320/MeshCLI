@@ -281,7 +281,7 @@ describe('handleHighlightWorkspaceFinding', () => {
     expect(result).toContain('created finding node');
     const node = useFlowStore.getState().nodes[0];
     expect(node.data.label).toBe('Finding');
-    expect(node.data.color).toBe('#22c55e');
+    expect(node.data.color).toBe('#35b978');
 
     const messages = useChatStore.getState().getMessages(node.id);
     expect(messages[0].role).toBe('assistant');

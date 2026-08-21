@@ -47,7 +47,7 @@ export function ChatInput({
   const flowNodes = useFlowStore((state) => state.nodes);
   const referenceOptions = useMemo(() => flowNodes
     .filter((node) => node.id !== nodeId)
-    .map((node) => ({ id: node.id, title: node.data.topic || node.data.label || 'Untitled node' })), [flowNodes, nodeId]);
+    .map((node) => ({ id: node.id, title: node.data.topic || node.data.label || t('node.untitled') })), [flowNodes, nodeId, t]);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -139,7 +139,7 @@ export function ChatInput({
 
   return (
     <div
-      className={`nodrag nopan border-t border-border p-2 transition ${
+      className={`nodrag nopan border-t border-border/70 bg-surface-900/55 p-2.5 transition ${
         isDragging ? 'bg-surface-700' : ''
       }`}
       onDragOver={(e) => {
@@ -173,19 +173,19 @@ export function ChatInput({
       {mode === 'agent' && images.length > 0 && (
         <div className="mb-2 flex flex-wrap gap-1.5">
           {images.map((file, index) => (
-            <span key={`${file.name}-${index}`} className="flex items-center gap-1 rounded-md border border-border bg-surface-800 px-2 py-1 text-[10px] text-text-secondary">
+            <span key={`${file.name}-${index}`} className="flex items-center gap-1 rounded-lg border border-border bg-surface-800 px-2 py-1 text-[10px] text-text-secondary">
               <Paperclip size={10} /> {file.name}
-              <button type="button" onClick={() => removeImage(index)} aria-label={`Remove ${file.name}`}><X size={10} /></button>
+              <button type="button" onClick={() => removeImage(index)} aria-label={t('chat.removeAttachment', { name: file.name })}><X size={10} /></button>
             </span>
           ))}
         </div>
       )}
 
       {mode === 'agent' && (
-        <div className="mb-2 rounded-lg border border-border bg-surface-950/60 p-1.5 text-[10px]">
+        <div className="mb-2 rounded-xl border border-border/70 bg-surface-950/45 p-2 text-[10px]">
           <button type="button" onClick={() => setOptionsOpen((open) => !open)} className="flex w-full items-center gap-1.5 text-text-secondary hover:text-text-primary">
             <FolderTree size={11} /> {t('agentRun.options')}
-            <span className="ml-auto text-text-muted">{agentModelId || t('agentRun.model')} · {workingDirectory || t('agentRun.repositoryRoot')}{referenceNodeIds.length ? ` · ${referenceNodeIds.length} refs` : ''}</span>
+            <span className="ml-auto text-text-muted">{agentModelId || t('agentRun.model')} · {workingDirectory || t('agentRun.repositoryRoot')}{referenceNodeIds.length ? ` · ${t('agentRun.referenceCount', { count: referenceNodeIds.length })}` : ''}</span>
             <ChevronDown size={11} className={optionsOpen ? 'rotate-180' : ''} />
           </button>
           {optionsOpen && (
@@ -195,7 +195,7 @@ export function ChatInput({
                 <select value={agentModelId} onChange={(event) => setAgentModelId(event.target.value)} className="rounded border border-border bg-surface-800 px-2 py-1 text-text-primary outline-none">
                   {agentModels.map((model) => <option key={model.id} value={model.id}>{model.name}</option>)}
                 </select>
-                <button type="button" title="Save as workspace default" disabled={!activeWorkspaceId || !agentModelId} onClick={() => activeWorkspaceId && useWorkspaceStore.getState().setDefaultAgentModel(activeWorkspaceId, agentModelId)} className="rounded p-1 text-text-muted hover:text-accent-400 disabled:opacity-30"><Save size={12} /></button>
+                <button type="button" title={t('agentRun.saveWorkspaceDefault')} disabled={!activeWorkspaceId || !agentModelId} onClick={() => activeWorkspaceId && useWorkspaceStore.getState().setDefaultAgentModel(activeWorkspaceId, agentModelId)} className="rounded p-1 text-text-muted hover:text-accent-400 disabled:opacity-30"><Save size={12} /></button>
               </label>
               <label className="grid grid-cols-[96px_1fr] items-center gap-1.5 text-text-muted">
                 <span>{t('agentRun.workingSubdirectory')}</span>
@@ -231,7 +231,7 @@ export function ChatInput({
           onPaste={handlePaste}
           placeholder={mode === 'agent' ? t('agentRun.promptPlaceholder') : t('chat.askSomething')}
           rows={1}
-          className="flex-1 resize-none bg-surface-800 text-sm text-text-primary rounded-lg px-3 py-2 placeholder-text-muted border border-border focus:border-accent-500/50 focus:outline-none transition-colors"
+          className="flex-1 resize-none rounded-xl border border-border bg-surface-800/80 px-3 py-2 text-sm text-text-primary placeholder-text-muted transition-colors focus:border-accent-500/60 focus:bg-surface-800 focus:outline-none"
           style={{ minHeight: '36px', maxHeight: '100px' }}
           onInput={(e) => {
             const target = e.target as HTMLTextAreaElement;
@@ -254,7 +254,7 @@ export function ChatInput({
           <button
             type="button"
             onClick={() => setModeMenuOpen((open) => !open)}
-            className={`flex h-8 items-center gap-1 rounded-lg border px-2 text-[10px] font-medium transition-colors ${
+            className={`flex h-9 items-center gap-1 rounded-xl border px-2.5 text-[10px] font-medium transition-colors ${
               mode === 'agent'
                 ? 'border-accent-500/50 bg-accent-500/15 text-accent-400'
                 : 'border-border bg-surface-800 text-text-secondary hover:bg-surface-700'
@@ -267,7 +267,7 @@ export function ChatInput({
             <ChevronDown size={11} />
           </button>
           {modeMenuOpen && (
-            <div className="absolute bottom-10 left-0 z-50 w-48 overflow-hidden rounded-lg border border-border bg-surface-950 p-1 shadow-xl shadow-black/40">
+            <div className="mesh-panel absolute bottom-11 left-0 z-50 w-52 overflow-hidden rounded-2xl p-1.5">
               <button
                 type="button"
                 onClick={() => selectMode('chat')}
@@ -299,7 +299,7 @@ export function ChatInput({
         <button
           onClick={() => fileInputRef.current?.click()}
           disabled={mode === 'chat' && !supportsVision}
-          className="shrink-0 p-2 rounded-lg bg-surface-800 text-text-secondary hover:bg-surface-700 transition disabled:opacity-30"
+          className="shrink-0 rounded-xl border border-border bg-surface-800 p-2.5 text-text-secondary transition hover:bg-surface-700 disabled:opacity-30"
           title={
             mode === 'agent'
               ? t('agentRun.attachFiles')
@@ -312,7 +312,7 @@ export function ChatInput({
         {isBusy ? (
           <button
             onClick={mode === 'agent' ? onCancelAgent : onCancel}
-            className="shrink-0 p-2 rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors"
+            className="shrink-0 rounded-xl border border-red-500/15 bg-red-500/15 p-2.5 text-red-400 transition-colors hover:bg-red-500/25"
             title={mode === 'agent' ? t('agentRun.stop') : t('common.stop')}
           >
             <Square size={16} />
@@ -321,7 +321,7 @@ export function ChatInput({
           <button
             onClick={handleSend}
             disabled={mode === 'agent' ? !input.trim() : (!input.trim() && images.length === 0)}
-            className="shrink-0 p-2 rounded-lg bg-accent-500/20 text-accent-400 hover:bg-accent-500/30 transition-colors disabled:opacity-30"
+            className="shrink-0 rounded-xl bg-accent-500 p-2.5 text-white shadow-[0_6px_18px_rgba(70,70,170,0.18)] transition-colors hover:bg-accent-600 disabled:opacity-30"
             title={mode === 'agent' ? t('agentRun.run') : t('selection.send')}
           >
             {mode === 'agent' ? <Play size={16} /> : <Send size={16} />}

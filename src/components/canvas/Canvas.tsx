@@ -315,13 +315,13 @@ export function Canvas() {
             variant={BackgroundVariant.Dots}
             gap={20}
             size={1}
-            color="#262626"
+            color="var(--canvas-dot)"
           />
           {showMinimap && (
             <MiniMap
-              nodeColor="#262626"
-              nodeStrokeColor="#404040"
-              maskColor="rgba(0, 0, 0, 0.7)"
+              nodeColor="var(--surface-700)"
+              nodeStrokeColor="var(--border-hover)"
+              maskColor="var(--minimap-mask)"
               pannable
               zoomable
             />

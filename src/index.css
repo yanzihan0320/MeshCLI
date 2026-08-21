@@ -16,49 +16,105 @@
   --color-text-muted: var(--text-muted);
   --color-border: var(--border-color);
   --color-border-hover: var(--border-hover);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  /* Product palette: Codex blue, green, and red only. */
+  --color-blue-300: var(--accent-400);
+  --color-blue-400: var(--accent-400);
+  --color-blue-500: var(--accent-500);
+  --color-blue-600: var(--accent-600);
+  --color-emerald-300: #62d39a;
+  --color-emerald-400: #35b978;
+  --color-emerald-500: #20935d;
+  --color-green-300: #62d39a;
+  --color-green-400: #35b978;
+  --color-green-500: #20935d;
+  --color-amber-300: #ff8f91;
+  --color-amber-400: #f26467;
+  --color-amber-500: #dd4549;
+  --color-red-300: #ff8f91;
+  --color-red-400: #f26467;
+  --color-red-500: #dd4549;
+  --color-red-600: #c5363b;
 }
 
-/* Dark theme (default) */
+/*
+ * MeshCLI visual foundation
+ * -------------------------
+ * Keep the original CaudalFlow interaction model intact while giving every
+ * surface the same quiet, high-contrast visual language. Components should
+ * consume these semantic tokens instead of inventing one-off colors.
+ */
 :root,
 [data-theme="dark"] {
-  --surface-950: #0a0a0a;
-  --surface-900: #171717;
-  --surface-800: #262626;
-  --surface-700: #404040;
-  --surface-600: #525252;
-  --accent-500: #6366f1;
-  --accent-400: #818cf8;
-  --accent-600: #4f46e5;
+  color-scheme: dark;
+  --surface-950: #0d1117;
+  --surface-900: #151a21;
+  --surface-800: #1f2630;
+  --surface-700: #2f3945;
+  --surface-600: #414d5b;
+  --accent-500: #4c8dff;
+  --accent-400: #78a9ff;
+  --accent-600: #356ee6;
 
-  --bg-primary: #0a0a0a;
-  --bg-secondary: #171717;
-  --bg-tertiary: #262626;
-  --text-primary: #e5e5e5;
-  --text-secondary: #a3a3a3;
-  --text-muted: #737373;
-  --border-color: #262626;
-  --border-hover: #404040;
+  --bg-primary: #0d1117;
+  --bg-secondary: #151a21;
+  --bg-tertiary: #1f2630;
+  --text-primary: #f6fafc;
+  --text-secondary: #c4cad3;
+  --text-muted: #8d96a3;
+  --border-color: #303844;
+  --border-hover: #4b5665;
+  --panel-bg: rgba(21, 26, 33, 0.78);
+  --control-bg: rgba(31, 38, 48, 0.64);
+  --canvas-dot: #343d49;
+  --minimap-mask: rgba(13, 17, 23, 0.60);
+  --success: #34c759;
+  --warning: #f26467;
+  --danger: #e5484d;
+  --selection-ring: rgba(76, 141, 255, 0.30);
+  --message-user-bg: linear-gradient(135deg, rgba(52, 123, 242, 0.38), rgba(28, 76, 177, 0.25));
+  --message-user-border: rgba(126, 170, 255, 0.30);
+  --message-user-text: #f2fcff;
+  --message-user-shadow: 0 14px 38px rgba(19, 70, 160, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.22);
+  --shadow-panel: 0 24px 70px rgba(0, 0, 0, 0.44), 0 1px 0 rgba(255, 255, 255, 0.04) inset;
+  --shadow-node: 0 18px 48px rgba(0, 0, 0, 0.30), 0 1px 0 rgba(255, 255, 255, 0.045) inset;
 }
 
-/* Light theme */
 [data-theme="light"] {
-  --surface-950: #f9fafb;
+  color-scheme: light;
+  --surface-950: #ffffff;
   --surface-900: #ffffff;
-  --surface-800: #f5f5f5;
-  --surface-700: #e5e5e5;
-  --surface-600: #d4d4d6;
-  --accent-500: #6366f1;
-  --accent-400: #818cf8;
-  --accent-600: #4f46e5;
+  --surface-800: #f8f9fa;
+  --surface-700: #eef0f2;
+  --surface-600: #dfe3e6;
+  --accent-500: #3f7fe8;
+  --accent-400: #6599f0;
+  --accent-600: #2f68cc;
 
   --bg-primary: #ffffff;
-  --bg-secondary: #f9fafb;
-  --bg-tertiary: #f3f4f6;
-  --text-primary: #111827;
-  --text-secondary: #6b7280;
-  --text-muted: #9ca3af;
-  --border-color: #e5e7eb;
-  --border-hover: #d1d5db;
+  --bg-secondary: #ffffff;
+  --bg-tertiary: #f8f9fa;
+  --text-primary: #172126;
+  --text-secondary: #49626d;
+  --text-muted: #78919b;
+  --border-color: #e2e5e8;
+  --border-hover: #c8cdd2;
+  --panel-bg: rgba(255, 255, 255, 0.78);
+  --control-bg: rgba(255, 255, 255, 0.68);
+  --canvas-dot: #d8dde1;
+  --minimap-mask: rgba(255, 255, 255, 0.58);
+  --success: #248a3d;
+  --warning: #dc4c50;
+  --danger: #c9363c;
+  --selection-ring: rgba(63, 127, 232, 0.22);
+  --message-user-bg: linear-gradient(135deg, rgba(43, 111, 226, 0.23), rgba(21, 67, 164, 0.14));
+  --message-user-border: rgba(38, 98, 204, 0.24);
+  --message-user-text: #153968;
+  --message-user-shadow: 0 14px 36px rgba(22, 69, 151, 0.10), inset 0 1px 0 rgba(255, 255, 255, 0.92);
+  --shadow-panel: 0 24px 70px rgba(22, 22, 28, 0.14), 0 1px 0 rgba(255, 255, 255, 0.9) inset;
+  --shadow-node: 0 16px 38px rgba(22, 22, 28, 0.11), 0 1px 0 rgba(255, 255, 255, 0.9) inset;
 }
 
 html, body, #root {
@@ -67,8 +123,86 @@ html, body, #root {
   padding: 0;
   background-color: var(--bg-primary);
   color: var(--text-primary);
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
   transition: background-color 0.2s, color 0.2s;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--accent-400);
+  outline-offset: 2px;
+}
+
+/* Shared visual primitives. They intentionally contain no behavior. */
+.mesh-panel {
+  background: var(--panel-bg);
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-panel);
+  backdrop-filter: saturate(175%) blur(26px);
+  -webkit-backdrop-filter: saturate(175%) blur(26px);
+}
+
+.mesh-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+}
+
+.mesh-user-bubble {
+  background: var(--message-user-bg);
+  border: 1px solid var(--message-user-border);
+  color: var(--message-user-text);
+  box-shadow: var(--message-user-shadow);
+  backdrop-filter: saturate(185%) blur(20px);
+  -webkit-backdrop-filter: saturate(185%) blur(20px);
+}
+
+.mesh-icon-button {
+  display: inline-flex;
+  width: 34px;
+  height: 34px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--control-bg);
+  color: var(--text-secondary);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 5px 18px rgba(0, 0, 0, 0.08);
+  backdrop-filter: blur(18px);
+  transition: color 160ms ease, background-color 160ms ease, border-color 160ms ease, transform 160ms ease;
+}
+
+.mesh-icon-button:hover {
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+  border-color: var(--border-hover);
+  transform: translateY(-1px);
+}
+
+.mesh-node-shell {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-node);
+}
+
+.mesh-node-shell[data-selected="true"] {
+  border-color: var(--accent-400);
+  box-shadow: 0 0 0 3px var(--selection-ring), var(--shadow-node);
 }
 
 /* React Flow styles */
@@ -77,9 +211,11 @@ html, body, #root {
 }
 
 .react-flow__minimap {
-  background-color: var(--bg-secondary) !important;
-  border-radius: 8px;
+  background-color: var(--panel-bg) !important;
+  border-radius: 12px;
   border: 1px solid var(--border-color);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
+  overflow: hidden;
 }
 
 .react-flow__controls {
@@ -109,6 +245,14 @@ html, body, #root {
   border: none !important;
 }
 
+.react-flow__edge-path {
+  transition: stroke 160ms ease, stroke-width 160ms ease, opacity 160ms ease;
+}
+
+.react-flow__node.selected {
+  z-index: 5 !important;
+}
+
 .auto-arranging .react-flow__node {
   transition: transform 300ms ease-out;
 }
@@ -120,12 +264,13 @@ html, body, #root {
 }
 
 ::selection {
-  background-color: rgba(99, 102, 241, 0.4);
+  background-color: rgba(76, 141, 255, 0.32);
   color: var(--text-primary);
 }
 
 ::-webkit-scrollbar {
-  width: 6px;
+  width: 7px;
+  height: 7px;
 }
 
 ::-webkit-scrollbar-track {
@@ -134,9 +279,22 @@ html, body, #root {
 
 ::-webkit-scrollbar-thumb {
   background-color: var(--border-hover);
-  border-radius: 3px;
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
 }
 
 ::-webkit-scrollbar-thumb:hover {
   background-color: var(--text-muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import {
   X, Send, MessageSquare, Loader2, Copy, Check, Wrench, Undo2, ShieldAlert,
   Network, Sparkles, Database, CheckCircle2, ChevronDown,
@@ -14,17 +15,17 @@ interface CustomCopilotChatProps {
   onClose: () => void;
 }
 
-function activityLabel(event: WorkspaceAssistantEvent): { title: string; detail: string; tone: string } {
+function activityLabel(event: WorkspaceAssistantEvent, t: TFunction): { title: string; detail: string; tone: string } {
   const command = event.payload.command as { type?: string } | undefined;
-  if (event.type === 'turn_started') return { title: 'LangGraph started', detail: String(event.payload.graphId ?? 'workspace assistant'), tone: 'text-violet-300' };
-  if (event.type === 'skill_activated') return { title: 'Skill activated', detail: String(event.payload.name ?? ''), tone: 'text-fuchsia-300' };
-  if (event.type === 'mcp_started') return { title: 'MCP call', detail: `${String(event.payload.serverId ?? '')} · ${String(event.payload.tool ?? '')}`, tone: 'text-cyan-300' };
-  if (event.type === 'mcp_finished') return { title: 'MCP completed', detail: String(event.payload.tool ?? ''), tone: 'text-emerald-300' };
-  if (event.type === 'mcp_failed') return { title: 'MCP failed', detail: String(event.payload.tool ?? ''), tone: 'text-red-300' };
-  if (event.type === 'canvas_command') return { title: 'Canvas command', detail: String(command?.type ?? ''), tone: 'text-blue-300' };
-  if (event.type === 'action_resolved') return { title: 'Canvas result', detail: String(event.payload.status ?? ''), tone: event.payload.status === 'applied' ? 'text-emerald-300' : 'text-amber-300' };
-  if (event.type === 'tool_started') return { title: 'Tool started', detail: String(event.payload.tool ?? event.payload.name ?? ''), tone: 'text-blue-300' };
-  if (event.type === 'tool_finished') return { title: 'Tool completed', detail: String(event.payload.tool ?? event.payload.name ?? ''), tone: 'text-emerald-300' };
+  if (event.type === 'turn_started') return { title: t('copilot.chat.traceLangGraphStarted'), detail: String(event.payload.graphId ?? t('copilot.chat.workspaceAssistant')), tone: 'text-accent-400' };
+  if (event.type === 'skill_activated') return { title: t('copilot.chat.traceSkillActivated'), detail: String(event.payload.name ?? ''), tone: 'text-accent-400' };
+  if (event.type === 'mcp_started') return { title: t('copilot.chat.traceMcpCall'), detail: `${String(event.payload.serverId ?? '')} · ${String(event.payload.tool ?? '')}`, tone: 'text-accent-400' };
+  if (event.type === 'mcp_finished') return { title: t('copilot.chat.traceMcpCompleted'), detail: String(event.payload.tool ?? ''), tone: 'text-emerald-400' };
+  if (event.type === 'mcp_failed') return { title: t('copilot.chat.traceMcpFailed'), detail: String(event.payload.tool ?? ''), tone: 'text-red-400' };
+  if (event.type === 'canvas_command') return { title: t('copilot.chat.traceCanvasCommand'), detail: String(command?.type ?? ''), tone: 'text-accent-400' };
+  if (event.type === 'action_resolved') return { title: t('copilot.chat.traceCanvasResult'), detail: String(event.payload.status ?? ''), tone: event.payload.status === 'applied' ? 'text-emerald-400' : 'text-amber-400' };
+  if (event.type === 'tool_started') return { title: t('copilot.chat.traceToolStarted'), detail: String(event.payload.tool ?? event.payload.name ?? ''), tone: 'text-accent-400' };
+  if (event.type === 'tool_finished') return { title: t('copilot.chat.traceToolCompleted'), detail: String(event.payload.tool ?? event.payload.name ?? ''), tone: 'text-emerald-400' };
   return { title: event.type.replaceAll('_', ' '), detail: '', tone: 'text-text-muted' };
 }
 
@@ -87,31 +88,32 @@ export function CustomCopilotChat({ isOpen, onClose }: CustomCopilotChatProps) {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-y-0 right-0 z-50 flex w-[min(500px,100vw)] flex-col border-l border-border bg-surface-950 shadow-2xl shadow-black/30">
+    <div className="mesh-panel fixed bottom-3 right-3 top-3 z-50 flex w-[min(520px,calc(100vw-24px))] flex-col overflow-hidden rounded-[22px] max-sm:bottom-0 max-sm:right-0 max-sm:top-0 max-sm:w-full max-sm:rounded-none">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-border bg-surface-900/90 px-4 py-3">
+      <div className="flex items-center justify-between border-b border-border/70 bg-surface-900/65 px-4 py-3.5 backdrop-blur-xl">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <MessageSquare size={18} className="text-accent-400" />
             <h2 className="text-sm font-semibold text-text-primary">{t('copilot.chat.title')}</h2>
-            <span className="inline-flex items-center gap-1 rounded-full border border-violet-400/25 bg-violet-400/10 px-2 py-0.5 text-[9px] font-medium text-violet-300">
+            <span className="inline-flex items-center gap-1 rounded-full border border-accent-400/20 bg-accent-500/8 px-2 py-0.5 text-[10px] font-medium text-accent-400">
               <Network size={10} /> LangGraph
             </span>
           </div>
-          <p className="mt-0.5 pl-6 text-[10px] text-text-muted">
-            Canvas tools · Skills · MCP orchestration
+          <p className="mt-0.5 pl-6 text-[11px] text-text-muted">
+            {t('copilot.chat.orchestrationSubtitle')}
           </p>
         </div>
         <button
           onClick={onClose}
-          className="p-1.5 text-text-secondary hover:text-text-primary hover:bg-surface-800 rounded-lg transition-colors"
+          className="rounded-xl p-2 text-text-secondary transition-colors hover:bg-surface-800 hover:text-text-primary"
+          aria-label={t('common.close')}
         >
           <X size={16} />
         </button>
       </div>
 
       {/* Messages */}
-      <div className="flex-1 space-y-4 overflow-y-auto p-4">
+      <div className="flex-1 space-y-5 overflow-y-auto bg-surface-950/45 px-4 py-5">
         {messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center">
             <MessageSquare size={48} className="text-surface-700 mb-4" />
@@ -126,14 +128,14 @@ export function CustomCopilotChat({ isOpen, onClose }: CustomCopilotChatProps) {
               className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
             >
               <div
-                className={`max-w-[90%] rounded-2xl px-4 py-3 shadow-sm ${
+              className={`max-w-[88%] rounded-[18px] px-4 py-3 ${
                   msg.role === 'user'
-                    ? 'rounded-br-md bg-accent-500 text-white'
-                    : 'rounded-bl-md border border-border/80 bg-surface-900 text-text-primary'
+                    ? 'mesh-user-bubble rounded-br-md'
+                    : 'rounded-bl-md border border-border/75 bg-surface-900/76 text-text-primary shadow-[0_8px_28px_rgba(0,0,0,0.07)] backdrop-blur-xl'
                 }`}
               >
                 {msg.role === 'assistant' ? (
-                  <div className="prose prose-sm max-w-none break-words text-[13px] leading-6 text-text-secondary prose-headings:text-text-primary prose-strong:text-text-primary prose-code:rounded prose-code:bg-surface-800 prose-code:px-1 prose-code:text-accent-300 prose-li:my-0.5 prose-p:my-2">
+                  <div className="prose prose-sm max-w-none break-words text-[13px] leading-6 text-text-secondary prose-headings:tracking-[-0.015em] prose-headings:text-text-primary prose-strong:text-text-primary prose-code:rounded-md prose-code:bg-surface-800 prose-code:px-1.5 prose-code:text-accent-400 prose-li:my-0.5 prose-p:my-2">
                     <Markdown remarkPlugins={[remarkGfm]}>{msg.content}</Markdown>
                   </div>
                 ) : (
@@ -159,30 +161,30 @@ export function CustomCopilotChat({ isOpen, onClose }: CustomCopilotChatProps) {
         )}
 
         {currentTrace.length > 0 && (
-          <section className="overflow-hidden rounded-xl border border-border bg-surface-900/80">
+          <section className="overflow-hidden rounded-2xl border border-border/75 bg-surface-900/65">
             <button
               type="button"
               onClick={() => setTraceOpen((value) => !value)}
               className="flex w-full items-center justify-between px-3 py-2.5 text-left"
             >
-              <span className="flex items-center gap-2 text-[11px] font-medium text-text-secondary">
-                <Wrench size={13} className="text-accent-400" /> Execution trace
-                <span className="text-[9px] text-text-muted">{currentTrace.length} events</span>
+              <span className="flex items-center gap-2 text-xs font-medium text-text-secondary">
+                <Wrench size={13} className="text-accent-400" /> {t('copilot.chat.executionTrace')}
+                <span className="text-[10px] text-text-muted">{t('copilot.chat.eventCount', { count: currentTrace.length })}</span>
               </span>
               <ChevronDown size={13} className={`text-text-muted transition-transform ${traceOpen ? '' : '-rotate-90'}`} />
             </button>
 
             <div className="flex flex-wrap gap-1.5 border-t border-border/60 px-3 py-2">
-              <span className="inline-flex items-center gap-1 rounded-full bg-violet-400/10 px-2 py-1 text-[9px] text-violet-300">
+              <span className="inline-flex items-center gap-1 rounded-full bg-accent-500/10 px-2 py-1 text-[9px] text-accent-400">
                 <Network size={10} /> LangGraph · {String(graphEvent?.payload.graphId ?? 'default')}
               </span>
               {currentSkills.map((skill) => (
-                <span key={skill} className="inline-flex items-center gap-1 rounded-full bg-fuchsia-400/10 px-2 py-1 text-[9px] text-fuchsia-300">
+                <span key={skill} className="inline-flex items-center gap-1 rounded-full border border-border/70 bg-surface-800 px-2 py-1 text-[9px] text-text-secondary">
                   <Sparkles size={10} /> Skill · {skill}
                 </span>
               ))}
               {mcpCalls.map((call) => (
-                <span key={call} className="inline-flex items-center gap-1 rounded-full bg-cyan-400/10 px-2 py-1 text-[9px] text-cyan-300">
+                <span key={call} className="inline-flex items-center gap-1 rounded-full border border-border/70 bg-surface-800 px-2 py-1 text-[9px] text-text-secondary">
                   <Database size={10} /> MCP · {call}
                 </span>
               ))}
@@ -191,7 +193,7 @@ export function CustomCopilotChat({ isOpen, onClose }: CustomCopilotChatProps) {
             {traceOpen && (
               <div className="space-y-1 border-t border-border/60 px-3 py-2">
                 {currentTrace.slice(-10).map((event) => {
-                  const label = activityLabel(event);
+                  const label = activityLabel(event, t);
                   return (
                     <div key={event.eventId} className="grid grid-cols-[14px_108px_1fr] items-center gap-2 text-[10px]">
                       <CheckCircle2 size={11} className={label.tone} />
@@ -206,32 +208,32 @@ export function CustomCopilotChat({ isOpen, onClose }: CustomCopilotChatProps) {
         )}
 
         {undoHistory.length > 0 && (
-          <section className="rounded-xl border border-accent-400/25 bg-accent-400/5 p-3">
+          <section className="rounded-2xl border border-accent-400/20 bg-accent-400/5 p-3.5">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="text-[11px] font-medium text-text-primary">Canvas undo history</p>
-                <p className="mt-0.5 text-[10px] text-text-muted">
-                  {undoHistory.length} reversible {undoHistory.length === 1 ? 'operation' : 'operations'} in this page session
+                <p className="text-xs font-medium text-text-primary">{t('copilot.chat.canvasUndoHistory')}</p>
+                <p className="mt-0.5 text-[11px] text-text-muted">
+                  {t('copilot.chat.reversibleOperationCount', { count: undoHistory.length })}
                 </p>
               </div>
               <div className="flex shrink-0 gap-1.5">
                 <button
                   type="button"
-                  onClick={() => setUndoFeedback(undo() ? 'Undid the latest canvas operation.' : 'Undo is unavailable because the canvas changed or the page was reloaded.')}
+                  onClick={() => setUndoFeedback(undo() ? t('copilot.chat.undoLatestSuccess') : t('copilot.chat.undoUnavailable'))}
                   className="inline-flex items-center gap-1 rounded-md border border-border bg-surface-900 px-2 py-1.5 text-[10px] text-accent-300 hover:bg-surface-800"
                 >
-                  <Undo2 size={11} /> Undo last
+                  <Undo2 size={11} /> {t('copilot.chat.undoLast')}
                 </button>
                 {undoHistory.length > 1 && (
                   <button
                     type="button"
                     onClick={() => {
                       const count = undoAll();
-                      setUndoFeedback(count ? `Undid all ${count} canvas operations.` : 'Undo is unavailable because the canvas changed or the page was reloaded.');
+                      setUndoFeedback(count ? t('copilot.chat.undoAllSuccess', { count }) : t('copilot.chat.undoUnavailable'));
                     }}
                     className="rounded-md bg-accent-500 px-2 py-1.5 text-[10px] font-medium text-white hover:bg-accent-600"
                   >
-                    Undo all ({undoHistory.length})
+                    {t('copilot.chat.undoAll', { count: undoHistory.length })}
                   </button>
                 )}
               </div>
@@ -247,15 +249,15 @@ export function CustomCopilotChat({ isOpen, onClose }: CustomCopilotChatProps) {
 
         {pendingCommand && (
           <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3">
-            <div className="flex items-center gap-2 text-amber-300 text-sm font-medium">
-              <ShieldAlert size={16} /> Confirmation required
+            <div className="flex items-center gap-2 text-sm font-medium text-amber-400">
+              <ShieldAlert size={16} /> {t('copilot.chat.confirmationRequired')}
             </div>
             <p className="mt-2 text-xs text-text-secondary">
               {pendingCommand.type}: {JSON.stringify(pendingCommand.payload)}
             </p>
             <div className="mt-3 flex gap-2">
-              <button onClick={() => void decidePending(true)} className="rounded-md bg-amber-500 px-3 py-1.5 text-xs font-medium text-black">Approve</button>
-              <button onClick={() => void decidePending(false)} className="rounded-md border border-border px-3 py-1.5 text-xs text-text-secondary">Reject</button>
+              <button onClick={() => void decidePending(true)} className="rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-medium text-black">{t('copilot.chat.approve')}</button>
+              <button onClick={() => void decidePending(false)} className="rounded-lg border border-border px-3 py-1.5 text-xs text-text-secondary">{t('copilot.chat.reject')}</button>
             </div>
           </div>
         )}
@@ -272,7 +274,7 @@ export function CustomCopilotChat({ isOpen, onClose }: CustomCopilotChatProps) {
       </div>
 
       {/* Input */}
-      <div className="border-t border-border bg-surface-900 p-4">
+      <div className="border-t border-border/70 bg-surface-900/78 p-4 backdrop-blur-xl">
         <div className="flex items-end gap-2">
           <textarea
             ref={inputRef}
@@ -281,7 +283,7 @@ export function CustomCopilotChat({ isOpen, onClose }: CustomCopilotChatProps) {
             onKeyDown={handleKeyDown}
             placeholder={t('copilot.chat.chatInputPlaceholder')}
             rows={1}
-            className="flex-1 resize-none bg-surface-800 text-sm text-text-primary rounded-xl px-4 py-3 placeholder-text-muted border border-border focus:border-accent-500/50 focus:outline-none transition-colors"
+            className="flex-1 resize-none rounded-2xl border border-border bg-surface-800/80 px-4 py-3 text-sm text-text-primary placeholder-text-muted transition-colors focus:border-accent-500/60 focus:bg-surface-800 focus:outline-none"
             style={{ minHeight: '48px', maxHeight: '120px' }}
             onInput={(e) => {
               const target = e.target as HTMLTextAreaElement;
@@ -291,7 +293,8 @@ export function CustomCopilotChat({ isOpen, onClose }: CustomCopilotChatProps) {
           />
           <button
             onClick={isRunning ? abort : handleSubmit}
-            className="shrink-0 p-3 rounded-xl bg-accent-500 text-white hover:bg-accent-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            className={`shrink-0 rounded-2xl p-3 text-white transition-all disabled:cursor-not-allowed disabled:opacity-40 ${isRunning ? 'bg-red-500 hover:bg-red-600' : 'bg-accent-500 hover:-translate-y-0.5 hover:bg-accent-600'}`}
+            aria-label={isRunning ? t('common.stop') : t('merge.send')}
           >
             {isRunning ? <X size={16} /> : <Send size={16} />}
           </button>

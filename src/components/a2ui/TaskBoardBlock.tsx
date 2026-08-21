@@ -1,5 +1,6 @@
 import { ArrowLeft, ArrowRight, CircleDot, Flag } from 'lucide-react';
 import type { TaskBoardBlock as TaskBoardBlockData } from '../../../packages/protocol/src/a2ui';
+import { useTranslation } from 'react-i18next';
 
 interface TaskBoardBlockProps {
   block: TaskBoardBlockData;
@@ -7,12 +8,13 @@ interface TaskBoardBlockProps {
 }
 
 const priorityStyles = {
-  low: 'text-sky-400',
+  low: 'text-accent-400',
   medium: 'text-amber-400',
   high: 'text-red-400',
 };
 
 export function TaskBoardBlock({ block, onChange }: TaskBoardBlockProps) {
+  const { t } = useTranslation();
   const moveTask = (columnIndex: number, taskIndex: number, direction: -1 | 1) => {
     const targetIndex = columnIndex + direction;
     if (targetIndex < 0 || targetIndex >= block.columns.length) return;
@@ -24,14 +26,14 @@ export function TaskBoardBlock({ block, onChange }: TaskBoardBlockProps) {
   };
 
   return (
-    <section className="overflow-hidden rounded-xl border border-border bg-surface-900 shadow-sm">
+    <section className="overflow-hidden rounded-2xl border border-border/70 bg-surface-900 shadow-sm">
       <header className="flex items-center gap-2 border-b border-border bg-surface-800 px-3 py-2">
         <CircleDot size={15} className="text-accent-400" />
         <h3 className="text-xs font-semibold text-text-primary">{block.title}</h3>
       </header>
       <div className="nowheel flex gap-2 overflow-x-auto p-2.5">
         {block.columns.map((column, columnIndex) => (
-          <div key={column.id} className="w-52 shrink-0 rounded-lg border border-border/70 bg-surface-950 p-2">
+          <div key={column.id} className="w-52 shrink-0 rounded-xl border border-border/70 bg-surface-950/70 p-2.5">
             <div className="mb-2 flex items-center justify-between gap-2">
               <h4 className="text-[10px] font-semibold uppercase tracking-wide text-text-secondary">{column.title}</h4>
               <span className="rounded-full bg-surface-800 px-1.5 py-0.5 text-[9px] text-text-muted">{column.tasks.length}</span>
@@ -43,7 +45,7 @@ export function TaskBoardBlock({ block, onChange }: TaskBoardBlockProps) {
                     <Flag size={11} className={`mt-0.5 shrink-0 ${priorityStyles[task.priority]}`} />
                     <div className="min-w-0 flex-1">
                       <h5 className="text-[10px] font-medium leading-snug text-text-primary">{task.title}</h5>
-                      {task.description && <p className="mt-1 text-[9px] leading-relaxed text-text-muted">{task.description}</p>}
+                      {task.description && <p className="mt-1 text-[10px] leading-relaxed text-text-muted">{task.description}</p>}
                     </div>
                   </div>
                   {block.columns.length > 1 && (
@@ -70,7 +72,7 @@ export function TaskBoardBlock({ block, onChange }: TaskBoardBlockProps) {
                   )}
                 </article>
               ))}
-              {column.tasks.length === 0 && <p className="py-3 text-center text-[9px] text-text-muted">No tasks</p>}
+              {column.tasks.length === 0 && <p className="py-3 text-center text-[10px] text-text-muted">{t('a2ui.noTasks')}</p>}
             </div>
           </div>
         ))}

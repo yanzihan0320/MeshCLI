@@ -7,8 +7,8 @@ import {
 } from 'recharts';
 
 const COLORS = [
-  '#6366f1', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6',
-  '#ec4899', '#14b8a6', '#f97316', '#06b6d4', '#84cc16',
+  '#4c8dff', '#2f68cc', '#78a9ff', '#35b978', '#20935d',
+  '#62d39a', '#e5484d', '#f26467', '#315faf', '#c9363c',
 ];
 
 interface ChartDataItem {
@@ -89,7 +89,7 @@ export function ChartRenderer({ args }: ChartRendererProps) {
               contentStyle={{ backgroundColor: '#1e1e1e', border: '1px solid #444', borderRadius: 6, fontSize: 12 }}
               itemStyle={{ color: '#e5e5e5' }}
             />
-            <Line type="monotone" dataKey="value" stroke="#6366f1" strokeWidth={2} dot={{ fill: '#6366f1' }} />
+            <Line type="monotone" dataKey="value" stroke="#4c8dff" strokeWidth={2} dot={{ fill: '#4c8dff' }} />
           </LineChart>
         )}
       </ResponsiveContainer>

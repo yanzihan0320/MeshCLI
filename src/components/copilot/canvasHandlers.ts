@@ -154,7 +154,7 @@ export function handleHighlightWorkspaceFinding(args: {
   const nodeId = createNodeAtEnd(args.title);
   useFlowStore.getState().updateNodeData(nodeId, {
     label: 'Finding',
-    color: '#22c55e',
+    color: '#35b978',
   });
   useChatStore.getState().initConversation(nodeId);
   useChatStore.getState().addMessage(nodeId, 'assistant', args.finding);

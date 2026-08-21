@@ -140,14 +140,14 @@ export function importWorkspace(file: File) {
         data = wsFile.data;
       } else if (parsed.nodes) {
         // Legacy format: plain {nodes, edges, conversations}
-        name = 'Imported Workspace';
+        name = i18n.t('workspace.importedWorkspace');
         data = {
           nodes: parsed.nodes,
           edges: parsed.edges ?? [],
           conversations: parsed.conversations ?? {},
         };
       } else {
-        alert('Invalid file format');
+        alert(i18n.t('workspace.invalidFileFormat'));
         return;
       }
 
@@ -170,7 +170,7 @@ export function importWorkspace(file: File) {
 
       // The workspace switch will trigger loadFromStorage via the useEffect
     } catch {
-      alert('Invalid file format');
+      alert(i18n.t('workspace.invalidFileFormat'));
     }
   };
   reader.readAsText(file);
@@ -185,7 +185,7 @@ export function usePersistence() {
   useEffect(() => {
     const { workspaces, createWorkspace } = useWorkspaceStore.getState();
     if (workspaces.length === 0) {
-      createWorkspace('My Workspace');
+      createWorkspace(i18n.t('workspace.defaultName'));
     }
   }, []);
 

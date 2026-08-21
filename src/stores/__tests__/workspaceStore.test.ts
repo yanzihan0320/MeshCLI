@@ -102,6 +102,14 @@ describe('workspaceStore', () => {
       expect(useWorkspaceStore.getState().activeWorkspaceId).toBe(workspaces[0].id);
     });
 
+    it('uses a localized replacement name when the last workspace is deleted', () => {
+      const id = useWorkspaceStore.getState().createWorkspace('Only');
+
+      useWorkspaceStore.getState().deleteWorkspace(id, '我的工作区');
+
+      expect(useWorkspaceStore.getState().workspaces[0].name).toBe('我的工作区');
+    });
+
     it('removes workspace data from localStorage', () => {
       const id = useWorkspaceStore.getState().createWorkspace('Temp');
       localStorage.setItem(`caudalflow-workspace-${id}`, JSON.stringify({ data: true }));

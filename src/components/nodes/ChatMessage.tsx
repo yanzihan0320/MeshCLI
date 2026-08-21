@@ -4,6 +4,7 @@ import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { Check, Copy } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import type { ChatMessage as ChatMessageType } from '../../types/chat';
 import { useChatStore } from '../../stores/chatStore';
 import { A2UIRenderer } from '../a2ui/A2UIRenderer';
@@ -51,7 +52,7 @@ function splitAndHighlight(text: string, texts: string[]): ReactNode {
       return (
         <mark
           key={i}
-          className="bg-yellow-400/25 text-yellow-300 rounded-sm px-0.5 decoration-yellow-400/50 underline underline-offset-2"
+          className="rounded-sm bg-accent-500/16 px-0.5 text-accent-400 underline decoration-accent-400/45 underline-offset-2"
         >
           {part}
         </mark>
@@ -66,6 +67,11 @@ export const ChatMessage = memo(function ChatMessage({
   exploredTexts,
   nodeId,
 }: ChatMessageProps) {
+  const { t } = useTranslation();
+  const translatedCopyLabel = t('chat.copyMessage');
+  const translatedCopiedLabel = t('chat.copiedMessage');
+  const copyLabel = translatedCopyLabel === 'chat.copyMessage' ? 'Copy message' : translatedCopyLabel;
+  const copiedLabel = translatedCopiedLabel === 'chat.copiedMessage' ? 'Copied message' : translatedCopiedLabel;
   const isUser = message.role === 'user';
   const isSystem = message.role === 'system';
   const [copied, setCopied] = useState(false);
@@ -114,8 +120,8 @@ export const ChatMessage = memo(function ChatMessage({
   if (isSystem) {
     return (
       <div className="px-3 py-1.5">
-        <div className="text-[11px] leading-relaxed text-text-muted bg-surface-800 border border-border rounded-lg px-3 py-2 italic">
-          <span className="text-text-secondary font-medium not-italic text-[10px] uppercase tracking-wider">System</span>
+        <div className="rounded-xl border border-border bg-surface-800/70 px-3 py-2 text-[11px] italic leading-relaxed text-text-muted">
+          <span className="text-[10px] font-medium uppercase tracking-wider text-text-secondary not-italic">{t('chat.system')}</span>
           <div className="mt-1 whitespace-pre-wrap">{message.content}</div>
         </div>
       </div>
@@ -131,13 +137,13 @@ export const ChatMessage = memo(function ChatMessage({
       <div
         className={`relative group text-sm leading-relaxed ${
           isUser
-            ? 'bg-accent-600 text-white rounded-2xl rounded-br-md px-3 py-2 pr-7 max-w-[85%] inline-block'
-            : 'text-text-primary prose-invert prose-sm max-w-none pr-7'
+            ? 'mesh-user-bubble inline-block max-w-[85%] rounded-2xl rounded-br-md px-3.5 py-2.5 pr-8'
+            : 'max-w-none rounded-xl px-1 pr-7 text-text-primary prose-invert prose-sm'
         }`}
       >
         <button
           type="button"
-          aria-label={copied ? 'Copied message' : 'Copy message'}
+          aria-label={copied ? copiedLabel : copyLabel}
           data-state={copied ? 'copied' : 'idle'}
           onClick={handleCopy}
           className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity text-text-muted hover:text-text-primary"

@@ -19,12 +19,12 @@ import { useNodeAgentRun } from '../../hooks/useNodeAgentRun';
 import { deriveExplanationPresentation } from '../../services/explanationBlocks';
 
 const PALETTE_COLORS = [
-  '#22c55e',
-  '#3b82f6',
-  '#f59e0b',
-  '#ef4444',
-  '#a855f7',
-  '#06b6d4',
+  '#4c8dff',
+  '#2f68cc',
+  '#78a9ff',
+  '#35b978',
+  '#20935d',
+  '#e5484d',
 ];
 
 export function ChatNodeComponent({ id, data, selected }: NodeProps<ChatNode>) {
@@ -386,9 +386,8 @@ export function ChatNodeComponent({ id, data, selected }: NodeProps<ChatNode>) {
   if (minimized) {
     return (
       <div
-        className={`relative flex items-center gap-2 bg-surface-900 border rounded-full shadow-lg shadow-black/30 px-3 py-1.5 cursor-grab active:cursor-grabbing ${
-          selected ? 'border-accent-500/60' : 'border-border'
-        } transition-colors`}
+        data-selected={selected}
+        className="mesh-node-shell relative flex cursor-grab items-center gap-2 rounded-full px-3 py-2 transition-all active:cursor-grabbing"
         onDoubleClick={handleRestore}
       >
         <Handle
@@ -440,9 +439,8 @@ export function ChatNodeComponent({ id, data, selected }: NodeProps<ChatNode>) {
   if (collapsed) {
     return (
       <div
-        className={`relative flex flex-col bg-surface-900 border rounded-lg shadow-lg shadow-black/30 w-[140px] cursor-grab active:cursor-grabbing ${
-          selected ? 'border-accent-500/60' : 'border-border'
-        } transition-colors`}
+        data-selected={selected}
+        className="mesh-node-shell relative flex w-[148px] cursor-grab flex-col rounded-xl transition-all active:cursor-grabbing"
       >
         <Handle
           type="target"
@@ -458,7 +456,7 @@ export function ChatNodeComponent({ id, data, selected }: NodeProps<ChatNode>) {
         />
 
         {/* Header with color indicator */}
-        <div className="flex items-center justify-between px-2 py-1.5 border-b border-border bg-surface-800 rounded-t-lg">
+        <div className="flex items-center justify-between rounded-t-xl border-b border-border/70 bg-surface-800/70 px-2.5 py-2">
           <div className="flex items-center gap-1.5 min-w-0">
             {color && (
               <div
@@ -466,7 +464,7 @@ export function ChatNodeComponent({ id, data, selected }: NodeProps<ChatNode>) {
                 style={{ backgroundColor: color }}
               />
             )}
-            <span className="text-[10px] font-medium text-text-primary truncate">
+            <span className="truncate text-[11px] font-semibold text-text-primary">
               {topic.length > 12 ? topic.slice(0, 12) + '...' : topic}
             </span>
           </div>
@@ -480,7 +478,7 @@ export function ChatNodeComponent({ id, data, selected }: NodeProps<ChatNode>) {
         </div>
 
         {/* Body */}
-        <div className="px-2 py-1.5 flex flex-col gap-1">
+        <div className="flex flex-col gap-1.5 px-2.5 py-2">
           {label && (
             <span className="text-[9px] text-text-muted truncate">
               {label}
@@ -520,11 +518,8 @@ export function ChatNodeComponent({ id, data, selected }: NodeProps<ChatNode>) {
   // Expanded view - full card
   return (
     <div
-      className={`relative flex flex-col bg-surface-900 border rounded-xl shadow-xl shadow-black/30 h-full ${
-        selected
-          ? 'border-accent-500/60'
-          : 'border-border'
-      } transition-colors`}
+      data-selected={selected}
+      className="mesh-node-shell relative flex h-full flex-col overflow-hidden rounded-2xl transition-[border-color,box-shadow] duration-200"
     >
       <NodeResizer
         minWidth={320}
@@ -571,7 +566,7 @@ export function ChatNodeComponent({ id, data, selected }: NodeProps<ChatNode>) {
         <div
           ref={popoverRef}
           onMouseDown={(e) => e.stopPropagation()}
-          className="absolute top-10 right-3 z-50 bg-surface-950 border border-border rounded-lg p-3 w-48 nodrag"
+          className="mesh-panel nodrag absolute right-3 top-11 z-50 w-52 rounded-2xl p-3"
         >
           <div className="flex flex-wrap gap-2 mb-2">
             {PALETTE_COLORS.map((c) => (
@@ -597,7 +592,7 @@ export function ChatNodeComponent({ id, data, selected }: NodeProps<ChatNode>) {
             }}
             placeholder={t('node.addLabel')}
             maxLength={20}
-            className="w-full text-xs bg-surface-800 px-2 py-1 rounded outline-none"
+            className="w-full rounded-lg border border-border bg-surface-800 px-2.5 py-1.5 text-xs outline-none focus:border-accent-500"
           />
 
           <button

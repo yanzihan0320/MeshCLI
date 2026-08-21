@@ -124,7 +124,7 @@ export function SettingsPanel() {
 
   const labelClass = 'block text-xs font-medium mb-1';
   const inputClass =
-    'w-full bg-surface-800 border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:border-accent-500/50 focus:outline-none transition-colors';
+    'w-full rounded-xl border border-border bg-surface-800/80 px-3 py-2.5 text-sm text-text-primary transition-colors focus:border-accent-500/60 focus:bg-surface-800 focus:outline-none';
 
   const themeOptions = [
     { value: 'light' as const, icon: Sun, label: t('settings.themeLight') },
@@ -133,41 +133,42 @@ export function SettingsPanel() {
   ];
 
   return (
-    <div className="absolute top-0 right-0 z-50 h-full w-[380px] max-w-[calc(100vw-1rem)] bg-surface-900 border-l border-border shadow-2xl shadow-black/50 flex flex-col">
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-        <h2 className="text-sm font-semibold text-text-primary">{t('settings.title')}</h2>
+    <div className="mesh-panel absolute bottom-3 right-3 top-3 z-50 flex w-[440px] max-w-[calc(100vw-24px)] flex-col overflow-hidden rounded-[22px] max-sm:bottom-0 max-sm:right-0 max-sm:top-0 max-sm:w-full max-sm:max-w-none max-sm:rounded-none">
+      <div className="flex items-center justify-between border-b border-border/70 bg-surface-900/60 px-5 py-4">
+        <h2 className="text-[15px] font-semibold tracking-[-0.01em] text-text-primary">{t('settings.title')}</h2>
         <button
           onClick={() => setShowSettings(false)}
-          className="text-text-secondary hover:text-text-primary transition-colors"
+          className="rounded-xl p-2 text-text-secondary transition-colors hover:bg-surface-800 hover:text-text-primary"
+          aria-label={t('common.close')}
         >
           <X size={18} />
         </button>
       </div>
 
-      <div className="grid grid-cols-3 gap-1 border-b border-border bg-surface-900 px-3 py-2">
+      <div className="mx-4 mt-3 grid grid-cols-3 gap-1 rounded-xl bg-surface-800/80 p-1">
         {(['general', 'skills', 'mcp'] as const).map((section) => (
           <button
             type="button"
             key={section}
             onClick={() => setActiveSection(section)}
-            className={`rounded-lg px-2 py-1.5 text-[11px] font-medium transition-colors ${activeSection === section ? 'bg-accent-500/15 text-accent-300' : 'text-text-muted hover:bg-surface-800 hover:text-text-primary'}`}
+            className={`rounded-lg px-2 py-2 text-xs font-medium transition-all ${activeSection === section ? 'bg-surface-900 text-text-primary shadow-sm' : 'text-text-muted hover:text-text-primary'}`}
           >
             {t(`settings.section${section.charAt(0).toUpperCase()}${section.slice(1)}`)}
           </button>
         ))}
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-5">
+      <div className="flex-1 space-y-6 overflow-y-auto p-5">
         {activeSection === 'general' && <>
         {/* Theme Section */}
-        <div className="border-b border-border pb-4">
+        <div className="border-b border-border/70 pb-5">
           <h3 className="text-xs font-semibold text-text-secondary mb-3">{t('settings.theme')}</h3>
           <div className="flex gap-2">
             {themeOptions.map((option) => (
               <button
                 key={option.value}
                 onClick={() => setTheme(option.value)}
-                className={`flex-1 flex flex-col items-center gap-1.5 p-3 rounded-lg border transition-all ${
+                className={`flex flex-1 flex-col items-center gap-1.5 rounded-xl border p-3.5 transition-all ${
                   theme === option.value
                     ? 'border-accent-500 bg-accent-500/10 text-accent-400'
                     : 'border-border bg-surface-800 text-text-secondary hover:border-border-hover'
@@ -186,7 +187,7 @@ export function SettingsPanel() {
             <h3 className="text-xs font-semibold text-text-secondary">{t('settings.modelRouting')}</h3>
             <p className="text-[10px] text-text-muted mt-1">{t('settings.modelRoutingDescription')}</p>
           </div>
-          <div className="rounded-xl border border-border bg-surface-800/60 p-3 space-y-3">
+          <div className="space-y-3 rounded-2xl border border-border/75 bg-surface-800/45 p-4">
             <div>
               <label className={labelClass}>{t('settings.nodeChatProvider')}</label>
               <select
@@ -407,7 +408,7 @@ export function SettingsPanel() {
 
         {/* Language Settings */}
         <div className="border-t border-border pt-4">
-          <h3 className="text-xs font-semibold text-text-secondary mb-3">Language</h3>
+          <h3 className="mb-3 text-xs font-semibold text-text-secondary">{t('settings.language')}</h3>
           <select
             value={language}
             onChange={(e) => setLanguage(e.target.value)}
@@ -422,8 +423,8 @@ export function SettingsPanel() {
         {activeSection === 'mcp' && <MCPSettings />}
       </div>
 
-      <div className="px-4 py-3 border-t border-border">
-        <p className="text-[10px] text-text-muted text-center">
+      <div className="border-t border-border/70 bg-surface-900/55 px-4 py-3">
+        <p className="text-center text-[11px] text-text-muted">
           {t('settings.savedToLocalStorage')}
         </p>
       </div>

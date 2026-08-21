@@ -5,6 +5,7 @@
     "themeLight": "亮色",
     "themeDark": "暗色",
     "themeSystem": "跟随系统",
+    "language": "语言",
     "llmProvider": "LLM 提供商",
     "nodeChatProvider": "节点对话 Provider",
     "assistantProvider": "MeshCLI 助手 Provider",
@@ -103,13 +104,22 @@
     "exploreMockMode": "探索模拟模式"
   },
   "workspace": {
-    "defaultName": "工作区",
+    "defaultName": "我的工作区",
+    "newWorkspaceName": "新建工作区",
+    "importedWorkspace": "导入的工作区",
+    "invalidFileFormat": "工作区文件格式无效",
+    "createFailed": "无法创建工作区，请刷新页面后重试。",
+    "workspaceList": "工作区",
+    "workspaceCount": "共 {{count}} 个",
     "newWorkspace": "新建工作区",
     "renameWorkspace": "重命名工作区",
     "deleteWorkspace": "删除工作区",
     "exportWorkspace": "导出工作区 (JSON)",
     "exportMarkdown": "导出为 Markdown",
     "importWorkspace": "导入工作区",
+    "bindRepository": "绑定 Git 仓库",
+    "selectingRepository": "正在选择…",
+    "folderPickerFallback": "文件夹选择器打开失败：{{message}}\n\n请输入 Git 仓库内目录的绝对路径：",
     "github": "在 GitHub 上查看"
   },
   "canvas": {
@@ -138,6 +148,10 @@
     "askQuestionToStart": "提出问题开始探索",
     "attachImage": "附加图片",
     "imagesNotSupported": "提供商不支持图片"
+    ,"removeAttachment": "移除附件 {{name}}"
+    ,"system": "系统"
+    ,"copyMessage": "复制消息"
+    ,"copiedMessage": "消息已复制"
   },
   "node": {
     "expand": "展开",
@@ -149,6 +163,7 @@
     "addLabelAndColor": "添加标签和颜色",
     "addLabel": "添加标签...",
     "clear": "清除",
+    "untitled": "未命名节点",
     "close": "关闭"
   },
   "selection": {
@@ -196,6 +211,27 @@
     "viewDiff": "查看 Diff",
     "diffTruncated": "界面已截断",
     "noChanges": "没有文件修改",
+    "referenceCount": "{{count}} 个引用",
+    "saveWorkspaceDefault": "保存为工作区默认模型",
+    "executionFlow": "Agent 执行流程",
+    "stepPlan": "规划",
+    "stepExecute": "执行",
+    "stepReview": "审查",
+    "stepApply": "应用",
+    "metricEvents": "事件",
+    "metricCommands": "命令",
+    "metricFiles": "文件",
+    "readOnlyComplete": "只读完成",
+    "readOnlyAnalysisComplete": "只读分析完成",
+    "readOnlyAnalysisDescription": "没有修改仓库文件，因此无需应用，也没有可撤销的代码变更。",
+    "undoCodeApply": "撤销代码应用",
+    "undoAvailableUntil": "代码撤销有效期至 {{time}}",
+    "supervisor": "主控",
+    "fallback": "备用路径",
+    "executor": "执行器",
+    "used": "已使用",
+    "available": "可用",
+    "mcpAvailableDescription": "LangGraph 主控可使用此 MCP，但本次运行不一定已经调用。",
     "status": {
       "queued": "排队中",
       "preparing": "准备工作区",
@@ -214,6 +250,9 @@
   "chart": {
     "noData": "未提供图表数据。"
   },
+  "a2ui": {
+    "noTasks": "暂无任务"
+  },
   "copilot": {
     "nodesAvailable": "{{count}} 个画布节点可用于 Copilot",
     "chat": {
@@ -222,6 +261,29 @@
       "welcomeMessageText": "有什么我可以帮助您的？",
       "chatInputPlaceholder": "输入消息...",
       "chatDisclaimerText": "AI 可能会犯错。请核实重要信息。",
+      "orchestrationSubtitle": "画布工具 · Skills · MCP 编排",
+      "workspaceAssistant": "工作区助手",
+      "executionTrace": "本轮执行",
+      "eventCount": "{{count}} 个事件",
+      "traceLangGraphStarted": "LangGraph 已启动",
+      "traceSkillActivated": "Skill 已激活",
+      "traceMcpCall": "MCP 调用",
+      "traceMcpCompleted": "MCP 已完成",
+      "traceMcpFailed": "MCP 失败",
+      "traceCanvasCommand": "画布操作",
+      "traceCanvasResult": "画布结果",
+      "traceToolStarted": "工具已启动",
+      "traceToolCompleted": "工具已完成",
+      "canvasUndoHistory": "画布撤销记录",
+      "reversibleOperationCount": "当前页面会话中有 {{count}} 个可撤销操作",
+      "undoLast": "撤销上一步",
+      "undoAll": "全部撤销（{{count}}）",
+      "undoLatestSuccess": "已撤销最近一次画布操作。",
+      "undoAllSuccess": "已撤销全部 {{count}} 个画布操作。",
+      "undoUnavailable": "画布已经变化或页面曾被重新加载，当前操作无法安全撤销。",
+      "confirmationRequired": "需要确认",
+      "approve": "批准",
+      "reject": "拒绝",
       "chatToggleOpenLabel": "打开聊天",
       "chatToggleCloseLabel": "关闭聊天",
       "assistantMessageToolbarCopyMessageLabel": "复制",

@@ -30,10 +30,10 @@ export function ChatNodeHeader({
 }: ChatNodeHeaderProps) {
   const { t } = useTranslation();
   
-  const btnClass = "p-1.5 rounded-md hover:bg-surface-700 transition-colors";
+  const btnClass = "p-1.5 rounded-lg hover:bg-surface-700 transition-colors";
   
   return (
-    <div className={`flex items-center gap-1 px-2 py-1.5 border-b border-border bg-surface-800 rounded-t-xl ${isPanning ? 'cursor-grab' : 'cursor-move'}`}>
+    <div className={`flex items-center gap-1 border-b border-border/70 bg-surface-800/55 px-2.5 py-2 ${isPanning ? 'cursor-grab' : 'cursor-move'}`}>
       <button
         onClick={onToggleCollapse}
         className={`nodrag ${btnClass} text-text-secondary hover:text-text-primary`}
@@ -43,7 +43,7 @@ export function ChatNodeHeader({
       </button>
       <div className="flex-1 min-w-0 px-1">
         <div className="flex items-center gap-1.5 min-w-0">
-          <span className="text-[11px] font-medium text-accent-400 bg-accent-500/10 px-2 py-0.5 rounded-full truncate">
+          <span className="truncate rounded-full bg-accent-500/8 px-2.5 py-1 text-[11px] font-semibold tracking-[-0.01em] text-accent-400">
             {topic}
           </span>
 
