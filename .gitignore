@@ -4,6 +4,9 @@ node_modules
 # Build output
 dist
 dist-ssr
+build/
+*.tsbuildinfo
+*.tgz
 
 # Logs
 logs
@@ -19,6 +22,12 @@ lerna-debug.log*
 .env.*
 !.env.example
 *.local
+.npmrc
+.pypirc
+*.key
+*.pem
+*.p12
+*.pfx
 
 # Editor directories and files
 .vscode/*
@@ -36,12 +45,30 @@ Thumbs.db
 
 # Test / coverage
 coverage
+.coverage
+.coverage.*
+htmlcov/
+playwright-report/
+test-results/
+/.playwright-cli/
 
 # Python / local agent runtime
 .venv/
 __pycache__/
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
 *.pyc
 .langgraph_api/
 .meshcli/
 .vercel
+
+# Local-only plans, generated documents, and diagnostics (keep out of releases)
+/.planning/
+/tmp/
+/output/
+
+# BFF fallback storage when LOCALAPPDATA is not set (for example on Linux).
+# Contains repository bindings and potentially sensitive absolute paths.
+/MeshCLI/

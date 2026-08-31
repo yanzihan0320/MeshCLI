@@ -6,7 +6,18 @@ import tseslint from 'typescript-eslint'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist', '**/.venv/**', '**/.pytest_cache/**', '.playwright-cli/**', 'output/**']),
+  globalIgnores([
+    'dist',
+    '**/.venv/**',
+    '**/.pytest_cache/**',
+    '**/.langgraph_api/**',
+    '**/.meshcli/**',
+    '.playwright-cli/**',
+    '.planning/**',
+    'tmp/**',
+    'output/**',
+    'MeshCLI/**',
+  ]),
   {
     files: ['**/*.{ts,tsx}'],
     extends: [
