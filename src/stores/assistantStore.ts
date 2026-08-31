@@ -65,6 +65,19 @@ function recoverFailedThread(workspace: WorkspaceAssistantState): WorkspaceAssis
   };
 }
 
+export function isAssistantTurnRetractable(workspace?: WorkspaceAssistantState): boolean {
+  if (!workspace) return false;
+  const latestUser = [...workspace.messages].reverse().find((message) => message.role === 'user');
+  if (!latestUser) return false;
+  const turnStartIndex = workspace.activity.findLastIndex((event) => (
+    event.type === 'turn_started' && event.timestamp >= latestUser.timestamp
+  ));
+  if (turnStartIndex < 0) return workspace.running;
+  return !workspace.activity.slice(turnStartIndex).some((event) => (
+    event.type === 'turn_finished' || event.type === 'turn_failed'
+  ));
+}
+
 const MAX_ACTIVITY = 500;
 const MAX_MESSAGES = 200;
 
@@ -148,7 +161,7 @@ export const useAssistantStore = create<AssistantState>()(
       }),
       retractLatestTurn: (workspaceId) => {
         const workspace = get().workspaces[workspaceId];
-        if (!workspace) return undefined;
+        if (!workspace || !isAssistantTurnRetractable(workspace)) return undefined;
         const userMessageIndex = workspace.messages.findLastIndex((message) => message.role === 'user');
         if (userMessageIndex < 0) return undefined;
         const userMessage = workspace.messages[userMessageIndex];

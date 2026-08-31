@@ -1,340 +1,259 @@
 # MeshCLI
 
-**Turn linear AI conversations into executable, graph-based agent workflows.**
+**Branch conversations. Connect ideas. Turn decisions into agent tasks.**
 
-MeshCLI is a visual Agent workspace built on the CaudalFlow canvas. It lets users branch useful parts of a conversation into independent nodes, continue each line of thought with local context, merge several nodes, and eventually run real agent tasks from the graph with visible progress and explicit approval for risky actions.
+MeshCLI is a local-first AI workspace on an infinite canvas. Explore a question in parallel, branch a useful response into a new conversation, merge different directions, and run repository-aware agents without losing the context behind the work.
 
-> MeshCLI is not just a chat UI or a mind map. Its product boundary is a graph-based workspace in which ideas can become traceable, reviewable, and executable work.
+[Features](#features) · [Quick start](#quick-start) · [Usage](#usage) · [Skills and MCP](#skills-and-mcp) · [Deployment](#deployment) · [Contributing](#contributing)
 
-## Project status
+> **Early access:** MeshCLI currently targets local, single-user use. The full backend is not ready to be exposed to anonymous internet users. See [Deployment](#deployment) before hosting it for others.
 
-MeshCLI is under active development. Phases 2–4 are implemented: the Gateway, isolated OpenHands execution, repository-safe Diff/Apply/Undo, replayable events, and the controlled A2UI renderer are working. Phase 5A now connects the right-side assistant to LangGraph and the frontend-owned canvas command loop; later Phase 5 hardening remains explicitly marked below.
+## Features
 
-| Capability | Status | Notes |
-| --- | --- | --- |
-| Infinite graph canvas | Available | Create, connect, move, collapse, and organize conversation nodes |
-| Branch from selected text | Available | Creates a child node with inherited context |
-| Multi-node merge | Available | Synthesizes several conversation paths into a new node |
-| Node-local conversations | Available | Each node keeps its own messages and context |
-| Multi-workspace persistence | Available | Browser persistence plus JSON/Markdown export |
-| Canvas assistant | Available (Phase 5A core) | Workspace-scoped LangGraph thread, persisted chat/activity, revision-checked native canvas commands, confirmation, and Undo |
-| Agent Gateway and normalized events | Available | Versioned node-run contract, OpenHands adapter, cancellation, and replayable SSE stream |
-| AG-UI-compatible run viewer | Available | Chat/Agent modes, command and file events, Changed Files, unified diff, Apply All, and Reject All |
-| Executable agent adapter | Available | OpenHands SDK + DockerWorkspace; the adapter contract remains vendor-neutral |
-| A2UI-style interactive blocks | Available (core set) | Chat explanations: mind map and comparison; Agent runs: task board, process timeline, metrics, confirmation, and diff review |
-| Skills | Available (read-only v1) | Built-in, global, and repository Skills; activation loads `SKILL.md`, references, and assets but never scripts |
-| MCP tools and permission manager | Available (read-only skeleton) | Server-side registry and allowlisted filesystem MCP bound to the selected repository; writable/OAuth tools remain Phase 5C |
-| Audit log, checkpoints, rollback | Planned | Required before broad autonomous execution |
+- **Conversation canvas** — create, connect, move, collapse, and organize nodes; branch from selected text and merge related conversations.
+- **Workspace assistant** — a LangGraph-powered assistant that reads canvas context and performs native canvas actions with real execution receipts, revision checks, confirmation for deletion, and transaction Undo.
+- **Node Agent Mode** — LangGraph supervises the task; OpenHands executes code in an isolated Docker workspace. Inspect progress, cancel a run, and review file changes before applying them.
+- **Reviewable changes** — unified diffs, Apply/Reject, conflict detection, and conditional Undo for applied repository changes.
+- **Skills and MCP** — discover reusable Skills and connect allowlisted, read-only external tools through a shared capability registry.
+- **Structured results** — controlled comparison tables, mind maps, task boards, timelines, metrics, and confirmation panels.
+- **Local workspaces** — multiple workspaces, browser-persisted conversations, JSON import/export, Markdown export, light/dark themes, and English/Chinese UI.
 
-## The problem
-
-Linear chats are good at answering one question at a time, but poor at preserving parallel reasoning. Exploring a tangent buries the original thread; comparing alternatives requires manual copying; and turning a conclusion into real work usually means leaving the conversation and losing its context.
-
-MeshCLI treats a conversation as a graph:
-
-1. Ask a question in the main conversation.
-2. Select a useful passage and branch it into a node.
-3. Continue the discussion inside that node with inherited and local context.
-4. Run an agent from the node when the idea is ready to become work.
-5. Review streamed activity, commands, proposed file changes, and permission requests.
-6. Merge related nodes into a clearer explanation, decision, comparison, or structured mind map.
-
-The graph is not decoration. It is the durable structure for context, decisions, execution, and results.
-
-## Product scope
-
-### MVP includes
-
-- A CaudalFlow-based graph canvas and a right-side primary conversation
-- Branching from selected AI output
-- Node-local follow-up conversations and explicit context inheritance
-- Multi-node merge with summaries and next actions
-- Running an agent from a node against a selected workspace
-- Streaming run events to the node UI
-- Controlled mind-map, comparison, checklist, confirmation, diff, task-board, process-timeline, and metric-card blocks
-- A read-only filesystem MCP connector; GitHub and browser/search connectors follow in Phase 5C
-- Workspace sandboxing, scoped file access, permission prompts, audit records, and cancellation
-- An adapter boundary so MeshCLI is not coupled to one model or agent runtime
-
-### Explicitly out of scope for the MVP
-
-- A full IDE replacement
-- Real-time multiplayer collaboration
-- A complex 3D canvas or social network
-- Unattended control of the user's computer
-- Running destructive or high-risk actions without explicit approval
-- Making Codex, Claude Code, OpenHands, or any other single runtime the permanent core
-
-## Experience model
-
-### Branch
-
-Selecting text in a response creates a connected child node. The child receives a deliberate context package: the selected source text, a parent summary, relevant messages, and its own future local messages. Context inheritance should be explicit and inspectable rather than an accidental dump of every upstream token.
-
-### Explore
-
-Every node is a focused conversation and potential unit of work. A user can ask follow-up questions, attach a workspace, inspect the context used by the agent, and start or cancel a run.
-
-### Execute
-
-An execution run produces normalized events such as:
-
-```text
-run_started -> text_delta/tool_started -> command_output/file_change
-            -> permission_required -> approved|rejected
-            -> run_finished|run_failed|run_cancelled
-```
-
-Plain text appears as chat, command output as a collapsible log, file changes as diffs, approval requests as confirmation panels, and completion as a summary card.
-
-### Merge
-
-Merging nodes collects their selected source text, summaries, local messages, and run results. The new node should produce a synthesis, decision summary, unresolved conflicts, and next actions. Ordinary chat remains explanation-oriented: a real comparison can render as a table, while five or more parallel ideas can render as an inline mind map. Execution task boards belong to Agent Mode.
-
-## Target architecture
-
-```text
-MeshCLI Graph UI (CaudalFlow foundation)
-        |
-        +-- A2UI-style block renderer
-        +-- AG-UI-compatible event viewer
-        +-- Native CanvasCommand executor + transaction Undo
-        |
-Browser-facing BFF (workspace and secret boundary)
-        |
-Right-side assistant: LangGraph + Skills + read-only MCP
-        |
-Node Agent Mode: Agent Gateway + Adapter Layer
-        |
-Execution Runtime (OpenHands adapter first, replaceable)
-```
-
-### Responsibility boundaries
-
-| Layer | Owns | Does not own |
-| --- | --- | --- |
-| Graph UI | Nodes, edges, conversations, run presentation, user decisions | Direct filesystem or shell execution |
-| UI protocols | Event display and interactive result schemas | Agent planning or tool implementation |
-| Agent Gateway | API entry, context assembly, run lifecycle, event normalization | Vendor-specific execution logic |
-| Orchestrator | Branch/merge/run/approval workflows, persistence, retry and resume | Direct low-level file edits or shell commands |
-| Agent adapters | One stable interface over different agent runtimes | Product-specific graph rendering |
-| Execution runtime | Reading, editing, commands, tests, observations | Canvas state and product navigation |
-| Tool and safety layer | MCP connections, sandbox, policy, approvals, audit | User-facing reasoning structure |
-
-Canvas operations are deliberately not wrapped as MCP. Unlike a writable Obsidian `.canvas` file, MeshCLI canvas state lives in browser-controlled Zustand/localStorage, so LangGraph emits a versioned `CanvasCommand` and the frontend validates `workspaceId` and `expectedRevision` before applying it. Skills provide instructions, MCP provides external capabilities, LangGraph owns memory/tool choice/interrupts, and OpenHands remains the isolated code-execution adapter used by node Agent Mode.
-
-### Deliberate architecture decisions
-
-- **SSE first:** the MVP should prefer Server-Sent Events for one-way run streaming. WebSockets can be added only when bidirectional runtime traffic is genuinely needed.
-- **SQLite first:** local development and the MVP should use a simple persistent store. PostgreSQL is a deployment option, not an early requirement.
-- **Protocols are internal contracts first:** `AgentEvent` and `A2UIBlock` should be small, versioned MeshCLI schemas that can map to AG-UI/A2UI conventions without blocking development on full protocol coverage.
-- **OpenHands is an adapter, not the product core:** it is a practical first execution engine, but all runtimes implement the same capability-based adapter contract.
-- **Permission checks are server-side:** UI confirmation is part of the experience, but enforcement must occur at the gateway/tool boundary.
-
-## Core contracts
-
-The adapter boundary is intentionally small:
-
-```ts
-interface AgentAdapter {
-  name: string;
-  capabilities: AgentCapability[];
-  run(input: AgentRunInput): AsyncIterable<AgentEvent>;
-}
-```
-
-The first interactive block set is also intentionally constrained:
-
-```ts
-type A2UIBlock =
-  | { type: "checklist"; title: string; items: ChecklistItem[] }
-  | { type: "diff_review"; files: DiffFile[] }
-  | { type: "confirmation"; title: string; description: string; actions: Action[] }
-  | { type: "task_board"; columns: TaskColumn[] }
-  | { type: "mind_map"; root: MindMapNode }
-  | { type: "comparison_table"; columns: string[]; rows: ComparisonRow[] }
-  | { type: "process_timeline"; steps: ProcessStep[] }
-  | { type: "metric_cards"; metrics: Metric[] };
-```
-
-The run, event, change-set, and A2UI contracts live in `packages/protocol`, so the UI, gateway, adapters, and tests share the same runtime-validated shapes. Rendering is registry-based and controlled: agents select from approved block types and data fields, but cannot generate or execute arbitrary React code.
-
-## Safety model
-
-Safety is a core subsystem, not a final polish step.
-
-- Every run is bound to an explicit workspace root.
-- File access is denied outside allowed paths.
-- Commands are evaluated against policy before execution.
-- Reads may be allowed by policy; writes, deletes, shell commands, pushes, external side effects, and sensitive-path access require risk-aware handling.
-- Proposed file changes are shown as diffs before protected writes.
-- Approval and rejection are recorded against the exact pending action.
-- Runs can be cancelled; long-running workflows must support pause/resume.
-- Executed actions produce an audit trail. Checkpoint and rollback support follows before broader autonomy.
-
-The UI must never imply that a click alone is the security boundary. The backend must revalidate the workspace, action, parameters, and approval token.
-
-## MVP delivery plan
-
-### Phase 1 — Graph workspace baseline
-
-Keep the working canvas, formalize node data, retain branch and merge, add the main conversation and node-local conversations, and expose a disabled/previewable **Run Agent** action.
-
-**Done when:** selected text can create a node, a node can continue its own conversation, and multiple nodes can merge predictably.
-
-### Phase 2 — Gateway and run events
-
-**Status: complete for the mock-execution milestone.**
-
-Define versioned run/event schemas, create the Agent Gateway, stream events with SSE, persist events to the correct node, and render a basic run log.
-
-**Done when:** a mock run visibly produces `run_started`, incremental output, and `run_finished` events that survive reload.
-
-### Phase 3 — First execution adapter
-
-**Status: complete for the OpenHands DockerWorkspace MVP.**
-
-The OpenHands adapter maps messages, plans, commands, observations, and file changes into MeshCLI events. A BFF-owned binding connects each MeshCLI workspace to a Git repository; the browser never supplies an arbitrary execution path. Every run snapshots the current Git working tree—including tracked and untracked user changes—into its own independent clone, and Docker mounts only that clone. Nodes may select a validated repository-relative starting directory, an allowed model, explicit node references, and bounded text attachments.
-
-Once a binary-safe ChangeSet is created, the full clone is deleted immediately. Apply is serialized per repository and revalidates the source fingerprint. If a parallel run has an older baseline, its patch is replayed against a fresh snapshot and must be reviewed again under a new ChangeSet ID. Successful Apply stores forward patch and pre/post fingerprints for a seven-day one-click Undo; Undo refuses to touch a repository that changed afterward. Terminal run artifacts are pruned by age, count, and total-size quotas.
-
-**Done when:** a node can analyze a real repository and propose a change without silently applying protected operations.
-
-### Phase 4 — Interactive result renderer
-
-**Status: complete for the initial controlled-rendering milestone.**
-
-The shared, versioned `A2UIBlock` union separates explanation UI from execution UI. Ordinary chat can replace a Markdown comparison table with a controlled comparison block and can replace an unordered list with an inline mind map only when it contains at least five parallel ideas. Agent plans map to To do / Doing / Done boards; runs also show a process timeline and metrics, while proposed change sets emit a bound diff and confirmation panel before any protected write. Invalid or unsupported blocks render accessible fallback text.
-
-**Done when:** ordinary explanations can become clearer without turning every answer into a visualization, while Agent Mode makes plans, execution, review, and protected actions visible. **Done for the current block set.**
-
-### Phase 5A — LangGraph canvas assistant loop
-
-**Status: core implementation available.** The browser calls only `POST /api/assistant/turns`; the BFF resolves the Workspace Binding and proxies to a workspace-scoped LangGraph thread. LangGraph emits native `CanvasCommand` events and pauses with `interrupt()`. The frontend atomically executes safe commands, checks the canvas revision, records activity and transactions, resumes the graph with the real result, and requires confirmation for deletion.
-
-**Done when:** multi-turn assistant memory survives panel close, real command receipts appear in the activity stream, mutations can be undone, and stale commands are rejected for replanning.
-
-### Phase 5B — Skills and read-only MCP
-
-**Status: core management and runtime implementation available.** Skill discovery merges repository `.meshcli/skills`, user `~/.meshcli/skills`, and built-ins in that priority order. The Settings panel shows source, validation errors, enablement, overrides, and actual assistant/node-Agent usage. The `meshcli skill` CLI validates, installs, enables, disables, and removes local or Git-hosted Skills. Only activated Skill content is loaded, symlinks and traversal are rejected, scripts are never run, and bounded context budgets apply.
-
-MeshCLI is the MCP Host rather than a universal proxy server. The `meshcli mcp` CLI maintains multiple focused stdio or Streamable HTTP registrations in the local capability registry; the Settings panel exposes only sanitized status, allowed tools, enablement, and connection tests. Commands, URLs, headers, roots, and secrets are never returned to the browser. The Python service uses `langchain-mcp-adapters`; only registrations explicitly marked read-only with a tool allowlist are exposed to Agents. The built-in official filesystem MCP remains rooted exclusively in the BFF-validated Workspace Binding.
-
-Node Agent Mode now runs through a `node-supervisor` LangGraph first. The graph activates the same Skills, can collect evidence with allowed read-only MCP tools, and produces a bounded execution brief. OpenHands remains the isolated code worker, and all resulting changes still pass through the existing Diff/Apply/Undo Gateway.
-
-**Done when:** the assistant can inspect repository evidence through read-only MCP and organize findings on the canvas without changing repository files.
-
-### Phase 5C — Writable connectors and durable recovery
-
-Add writable MCP tools, GitHub/browser connectors, OAuth, a shared permission manager, durable audit records, checkpoints, and restart-safe recovery of pending interrupts. A service restart may currently expire an outstanding confirmation, which the user must reissue.
-
-**Done when:** external side effects are scoped, inspectable, explicitly confirmable, auditable, and recoverable.
-
-### Capability CLI examples
-
-```bash
-meshcli skill validate ./my-skill
-meshcli skill add ./my-skill --scope workspace --workspace .
-meshcli skill add https://github.com/example/agent-skills.git --skill skills/code-review
-meshcli skill list
-
-meshcli mcp add docs --transport streamable-http --url https://example.com/mcp --read-only --allow-tools search_docs,read_doc
-meshcli mcp add local-tool --transport stdio --read-only --allow-tools search -- python ./server.py
-meshcli mcp list
-meshcli mcp test workspace-filesystem --workspace-root .
-```
-
-Remote credentials are referenced by environment-variable name rather than stored in browser state. For example, add repeated `--header-env "Authorization=DOCS_AUTHORIZATION"` arguments and set that environment variable before starting the BFF and Agent service.
-
-## Demo scenario
-
-1. The user asks: “Analyze how this repository should be refactored.”
-2. They branch “refactor frontend state management” into one node.
-3. Inside that node they request a concrete, repository-aware plan.
-4. MeshCLI streams file reads and analysis events from the execution adapter.
-5. A proposed command or edit pauses and displays a confirmation panel and diff.
-6. The user creates another node for “improve the Agent Gateway.”
-7. They merge both nodes into “final refactoring plan.”
-8. The ordinary merged explanation uses a comparison or mind map when structurally useful; an Agent run renders its executable plan as a task board.
-
-## Current repository layout
-
-```text
-src/                  React graph workspace
-  components/         Canvas, nodes, copilot bridge, and UI
-  hooks/              Chat, persistence, selection, and interaction hooks
-  stores/             Flow, chat, settings, and workspace state
-  services/           LLM streaming and provider adapters
-  types/              Frontend domain types
-  utils/              Prompts, layout, and helpers
-apps/
-  agent/              Python LangGraph assistant, canvas tools, Skills, and MCP registry
-  bff/                Current Hono backend-for-frontend
-  mcp/                Reserved for additional MCP server packages
-packages/
-  protocol/           Shared runtime-validated run, A2UI, CanvasCommand, and assistant event contracts
-bin/                  CLI entry point
-```
-
-The repository will likely evolve toward `apps/web`, `apps/gateway`, and `packages/protocol`; that reorganization should happen only when the shared runtime contracts exist, not as a cosmetic move.
-
-## Local development
+## Quick start
 
 ### Requirements
 
-- Node.js 20.12 or newer
-- npm
-- Python for the optional LangGraph agent
+| Requirement | Used for |
+| --- | --- |
+| Node.js 22.12+ and npm | Frontend, BFF, and CLI |
+| Git | Installation and repository-backed Agent runs |
+| Python 3.12 recommended | LangGraph assistant; the assistant alone supports Python 3.11+ |
+| uv and a running Docker daemon | Optional: OpenHands code execution |
+
+Python 3.12 is required by the current OpenHands runtime. Model providers may charge for API usage.
+
+### 1. Get the source
 
 ```bash
 git clone https://github.com/yanzihan0320/MeshCLI.git
 cd MeshCLI
-npm install
+npm ci
 ```
 
-Frontend only:
+### 2. Try the canvas without an API key
 
 ```bash
 npm run dev
 ```
 
-Full current prototype stack on macOS/Linux:
+Open `http://localhost:5173`. The default Mock provider lets you explore the canvas and node conversations without a backend. Real model calls, the workspace assistant, MCP, and Agent execution require the services below.
+
+### 3. Enable model calls and the workspace assistant
+
+Copy the configuration template.
+
+macOS / Linux:
+
+```bash
+cp apps/agent/.env.example apps/agent/.env
+```
+
+Windows PowerShell:
+
+```powershell
+Copy-Item apps/agent/.env.example apps/agent/.env
+```
+
+Edit `apps/agent/.env` and configure an OpenAI-compatible provider:
+
+```dotenv
+OPENAI_BASE_URL=https://api.openai.com/v1
+OPENAI_API_KEY=your-api-key
+OPENAI_MODEL=your-model-id
+```
+
+Use a model that supports tool calling for the assistant. The [configuration template](apps/agent/.env.example) also documents the optional providers and runtime settings. Keep real credentials in the local `.env` file, never in source code or browser-side environment variables.
+
+Install the assistant and start the stack:
 
 ```bash
 npm run install:agent
 npm run dev:copilot
 ```
 
-On Windows, install the agent with `npm run install:agent:win`, then start `dev:ui`, `dev:bff`, and `dev:agent:win` in three terminals. The current `dev:copilot` script invokes the POSIX agent command.
+These scripts work on Windows, macOS, and Linux. Stop the frontend-only process first if it is already using port 5173.
 
-Individual services:
+| Service | Default address |
+| --- | --- |
+| Frontend | `http://localhost:5173` |
+| BFF | `http://localhost:4000` |
+| LangGraph Agent Server | `http://127.0.0.1:8133` |
+
+In Settings, choose your configured provider and model. The browser sends requests through the BFF; server model credentials are not returned to the browser.
+
+### 4. Enable code execution (optional)
+
+Install uv, start Docker, and install the isolated OpenHands runtime:
 
 ```bash
-npm run dev:ui
-npm run dev:bff
-npm run dev:agent           # macOS/Linux
-npm run dev:agent:win       # Windows
+npm run install:openhands
 ```
 
-Quality checks:
+The template selects `AGENT_ADAPTER=openhands` and `AGENT_WORKSPACE_MODE=docker`. In MeshCLI, bind a workspace to a Git repository, then switch a node from Chat to Agent mode.
+
+The repository must exist on the machine running the BFF. The native folder picker is currently Windows-only; other systems use the manual path fallback. A web browser does not upload its local repository through this control.
+
+## Usage
+
+1. **Start a conversation.** Ask a question in a canvas node.
+2. **Branch an idea.** Select a useful passage in a response and create a child node with its own context.
+3. **Explore alternatives.** Continue several conversations independently, then select related nodes to merge.
+4. **Ask the workspace assistant.** For example: “Create three frontend refactoring directions, one node per direction.” Check the activity records for actual canvas actions.
+5. **Use repository evidence.** Bind a repository and ask: “Use the read-only filesystem MCP to read README.md and organize three findings on the canvas.”
+6. **Run an Agent.** Give a node a coding task, follow its events and response, then review the proposed diff before Apply.
+
+Canvas Undo reverses assistant canvas transactions. Code Undo reverses an applied repository change only while the recorded repository state still matches. They are separate histories; a read-only run has no code change to undo.
+
+## Skills and MCP
+
+### Skills
+
+Skills use a `SKILL.md` file containing a name, description, and instructions. Discovery priority is:
+
+```text
+bound-repository/.meshcli/skills/
+    > ~/.meshcli/skills/
+    > built-in Skills
+```
+
+Settings shows the discovered Skills, their sources, validation errors, enabled state, and recorded usage. Select a Skill explicitly with `$skill-name`, or let the agent activate it from its description. Full content is loaded only after activation.
+
+Manage Skills from a source checkout:
 
 ```bash
-npm run build
+node bin/cli.js skill validate ./my-skill
+node bin/cli.js skill add ./my-skill --scope workspace --workspace .
+node bin/cli.js skill list
+```
+
+The current loader reads instructions, references, and assets. It does not execute Skill scripts, and rejects symlinks and directory traversal.
+
+### MCP
+
+MeshCLI acts as an MCP host: register focused servers rather than building a universal proxy server. The current runtime exposes only enabled, read-only registrations with an explicit tool allowlist.
+
+```bash
+node bin/cli.js mcp list
+node bin/cli.js mcp test workspace-filesystem --workspace-root .
+```
+
+To register your own read-only HTTP server, replace the example URL and tool names:
+
+```bash
+node bin/cli.js mcp add docs --transport streamable-http --url https://example.com/mcp --read-only --allow-tools search_docs,read_doc
+```
+
+The built-in filesystem MCP gets its root from the validated workspace binding. Settings shows sanitized status and available tools; server commands and credentials stay server-side. Only install servers you trust: a read-only tool allowlist does not make an arbitrary server process safe.
+
+## Configuration
+
+All local service settings are documented in [apps/agent/.env.example](apps/agent/.env.example).
+
+| Group | Main settings |
+| --- | --- |
+| Models | `OPENAI_BASE_URL`, `OPENAI_API_KEY`, `OPENAI_MODEL`; optional Anthropic and Gemini configuration |
+| Services | `FRONTEND_ORIGIN`, `PORT`, `LANGGRAPH_URL` |
+| Agent execution | `AGENT_ADAPTER`, `AGENT_WORKSPACE_MODE`, `AGENT_ALLOWED_MODELS`, iteration/retry limits |
+| Storage | `AGENT_RUNS_DIR`, run retention, count, and size limits |
+| Capabilities | `MESHCLI_CAPABILITIES_PATH`, built-in filesystem MCP settings |
+| Tracing | `LANGSMITH_TRACING`, `LANGSMITH_API_KEY`, `LANGSMITH_PROJECT` |
+
+LangSmith tracing is optional and disabled in the template. If enabled, prompts, tool inputs, canvas context, and repository-derived content may be sent to LangSmith.
+
+The assistant uses port 8133 by default. To override the launch port, set `LANGGRAPH_PORT` in the launching shell; `LANGGRAPH_URL` must point to the same port.
+
+## Architecture
+
+```text
+React canvas and conversations
+             |
+             v
+       Hono BFF / Gateway
+          /         \
+         v           v
+Canvas assistant   Node supervisor
+      LangGraph + shared Skills / read-only MCP
+         |           |
+CanvasCommand     OpenHands / Docker
+         |           |
+Frontend checks   Proposed repository diff
+and applies       -> review -> Apply / Undo
+```
+
+Canvas actions are native commands executed by the frontend, not MCP filesystem writes. LangGraph coordinates the assistant and node supervisor; Skills supply instructions; MCP supplies external tools; OpenHands handles isolated code execution.
+
+```text
+src/                 React canvas, conversations, state, and UI
+apps/bff/            API proxy, workspace bindings, and Agent Gateway
+apps/agent/          LangGraph graphs, Skills, and MCP integration
+apps/openhands/      Isolated code-execution runtime
+packages/protocol/   Runtime-validated shared event and action schemas
+bin/                 Frontend launcher and capability CLI
+scripts/             Local installation and startup helpers
+```
+
+## Data and privacy
+
+- Canvas nodes, edges, node conversations, workspace metadata, and assistant history are stored in browser-local storage. They are not account-synced.
+- JSON workspace export includes canvas data and node conversations. It is not a full backup of assistant history, server bindings, credentials, or execution artifacts.
+- Repository bindings, capability configuration, run artifacts, and LangGraph development state live on the machine running the services.
+- Changing the site origin or clearing browser storage can make previous local workspaces unavailable. Export important canvas work before moving between installations.
+- Local-first does not mean offline: model calls and enabled remote MCP servers receive the context needed for their requests. Optional tracing adds another external destination.
+
+## Deployment
+
+**Source checkout and local use are the supported starting point.** For a public website, distinguish a canvas demo from a full Agent service:
+
+- **Canvas-only demo:** build with `npm run build` and serve `dist/` as a static site. Use the Mock provider; live assistant and Agent features need a backend.
+- **Full hosted service:** requires a separately deployed BFF, LangGraph service, Docker-capable execution workers, and durable storage. The frontend must route `/api/*` to the BFF.
+
+Do not expose the current full backend directly to the public internet. It does not yet provide user authentication, per-user resource ownership, tenant isolation, or usage quotas; repository binding and capability-management routes assume a trusted local user. CORS is not authentication.
+
+The checked-in `vercel.json` does not provision a complete production Agent stack. The local `langgraph dev` launcher is for development, and `npm run preview` only previews the frontend build. See the official [LangGraph local server guide](https://docs.langchain.com/oss/python/langgraph/local-server) and [Vite static deployment guide](https://vite.dev/guide/static-deploy).
+
+The current CLI launcher serves the built frontend and provides capability commands; it does not install or start the full backend stack. Use the source-checkout instructions above for all features.
+
+## Development
+
+```bash
+npm run dev:ui           # Frontend
+npm run dev:bff          # BFF (separate terminal)
+npm run dev:agent        # LangGraph (separate terminal)
+
 npm run lint
 npm test
+npm run build
 ```
 
-Copy `apps/agent/.env.example` to `apps/agent/.env` and configure real model credentials there. For OpenAI-compatible providers, set `OPENAI_BASE_URL`, `OPENAI_API_KEY`, and `OPENAI_MODEL`; the local BFF keeps these values out of the browser. Never commit API keys or place secrets in documentation, browser storage, or test fixtures.
+Python tests, after installing the corresponding runtimes:
+
+```bash
+# From apps/agent, with its .venv activated:
+python -m pytest
+
+# From the repository root:
+npm run test:openhands
+```
 
 ## Contributing
 
-Read [AGENTS.md](./AGENTS.md) before making changes and [CONTRIBUTING.md](./CONTRIBUTING.md) for the existing contribution workflow. In particular:
+Bug reports, documentation improvements, tests, and pull requests are welcome. Please include reproduction steps, your OS/browser, and relevant errors with secrets removed. Discuss large changes in an issue before implementing them.
 
-- Preserve the distinction between implemented and planned capabilities.
-- Keep the graph, protocol, orchestration, execution, and permission boundaries explicit.
-- Add regression tests for behavior changes.
-- Treat `../references/` as read-only source material, not as code to edit in place.
+Preserve existing canvas interactions, add regression tests for behavior changes, and run the relevant checks before submitting. Contributors using coding agents should also read [AGENTS.md](AGENTS.md).
+
+## Acknowledgements
+
+The canvas foundation originates from **CaudalFlow** by **Caudal Labs**. MeshCLI builds on that interaction model with agent orchestration, repository execution, Skills, and MCP. The original copyright notice is retained.
 
 ## License
 
-[MIT](./LICENSE)
+[MIT](LICENSE).

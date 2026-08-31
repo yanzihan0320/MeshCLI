@@ -330,6 +330,18 @@ describe('chatStore', () => {
     });
   });
 
+  describe('appendToMessage', () => {
+    it('ignores a late stream token after its deleted placeholder is gone', () => {
+      useChatStore.getState().initConversation('node-1');
+      useChatStore.getState().addOrUpdateMessage('node-1', {
+        id: 'assistant-old', role: 'assistant', content: 'Preserved', timestamp: 100,
+      });
+      useChatStore.getState().appendToMessage('node-1', 'assistant-deleted', 'late token');
+
+      expect(useChatStore.getState().getMessages('node-1')[0].content).toBe('Preserved');
+    });
+  });
+
   describe('interactive message blocks', () => {
     it('atomically replaces streamed markdown with an explanation presentation', () => {
       useChatStore.getState().initConversation('node-1');
@@ -372,6 +384,49 @@ describe('chatStore', () => {
         id: 'board-1',
         columns: [expect.objectContaining({ tasks: [expect.objectContaining({ id: 'task-1' })] })],
       });
+    });
+  });
+
+  describe('deleteTurnFromMessage', () => {
+    it('removes the selected user turn and every dependent message after it', () => {
+      useChatStore.getState().initConversation('node-1');
+      useChatStore.getState().addOrUpdateMessage('node-1', {
+        id: 'user-1', role: 'user', content: 'Keep', timestamp: 100,
+      });
+      useChatStore.getState().addOrUpdateMessage('node-1', {
+        id: 'assistant-1', role: 'assistant', content: 'Keep answer', timestamp: 110,
+      });
+      useChatStore.getState().addOrUpdateMessage('node-1', {
+        id: 'user-2', role: 'user', content: 'Delete', timestamp: 200, triggeredBy: 'run-2',
+      });
+      useChatStore.getState().addOrUpdateMessage('node-1', {
+        id: 'assistant-2', role: 'assistant', content: 'Delete answer', timestamp: 210, triggeredBy: 'run-2',
+      });
+      useChatStore.getState().addOrUpdateMessage('node-1', {
+        id: 'user-3', role: 'user', content: 'Dependent follow-up', timestamp: 300,
+      });
+      useChatStore.getState().setStreaming('node-1', true);
+
+      const removed = useChatStore.getState().deleteTurnFromMessage('node-1', 'user-2');
+
+      expect(removed.map((message) => message.id)).toEqual(['user-2', 'assistant-2', 'user-3']);
+      expect(useChatStore.getState().getMessages('node-1').map((message) => message.id))
+        .toEqual(['user-1', 'assistant-1']);
+      expect(useChatStore.getState().conversations['node-1'].isStreaming).toBe(false);
+    });
+
+    it('resolves an assistant message to the user turn that produced it', () => {
+      useChatStore.getState().initConversation('node-1');
+      useChatStore.getState().addOrUpdateMessage('node-1', {
+        id: 'user-1', role: 'user', content: 'Question', timestamp: 100,
+      });
+      useChatStore.getState().addOrUpdateMessage('node-1', {
+        id: 'assistant-1', role: 'assistant', content: 'Answer', timestamp: 110,
+      });
+
+      expect(useChatStore.getState().deleteTurnFromMessage('node-1', 'assistant-1').map((message) => message.id))
+        .toEqual(['user-1', 'assistant-1']);
+      expect(useChatStore.getState().getMessages('node-1')).toEqual([]);
     });
   });
 });

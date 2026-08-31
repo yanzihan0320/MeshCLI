@@ -10,7 +10,7 @@ import {
   undoCanvasCommand,
 } from './canvasCommandExecutor';
 import { CanvasCommandSchema, type CanvasCommandResult, type WorkspaceAssistantEvent } from '../../../packages/protocol/src/assistant';
-import { useAssistantStore } from '../../stores/assistantStore';
+import { isAssistantTurnRetractable, useAssistantStore } from '../../stores/assistantStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useWorkspaceStore } from '../../stores/workspaceStore';
 
@@ -148,6 +148,9 @@ export function useAgent() {
     if (!activeWorkspaceId) return { removed: false, canvasActionCount: 0, undoneCanvasActionCount: 0 };
     const store = useAssistantStore.getState();
     const state = store.ensureWorkspace(activeWorkspaceId);
+    if (!isAssistantTurnRetractable(state)) {
+      return { removed: false, canvasActionCount: 0, undoneCanvasActionCount: 0 };
+    }
     const latestUser = [...state.messages].reverse().find((message) => message.role === 'user');
     if (!latestUser) return { removed: false, canvasActionCount: 0, undoneCanvasActionCount: 0 };
     const turnStart = state.activity.findLastIndex((event) => (
@@ -176,6 +179,7 @@ export function useAgent() {
     usedSkills: workspace?.usedSkills ?? [],
     pendingCommand: workspace?.pendingCommand,
     isRunning: workspace?.running ?? false,
+    canRetract: isAssistantTurnRetractable(workspace),
     send,
     abort,
     retractLatestTurn,

@@ -8,11 +8,13 @@ import { useTranslation } from 'react-i18next';
 import type { ChatMessage as ChatMessageType } from '../../types/chat';
 import { useChatStore } from '../../stores/chatStore';
 import { A2UIRenderer } from '../a2ui/A2UIRenderer';
+import { TurnDeleteControl } from '../ui/TurnDeleteControl';
 
 interface ChatMessageProps {
   message: ChatMessageType;
   exploredTexts: string[];
   nodeId?: string;
+  onDeleteTurn?: (messageId: string) => void;
 }
 
 function highlightExplored(children: ReactNode, texts: string[]): ReactNode {
@@ -66,6 +68,7 @@ export const ChatMessage = memo(function ChatMessage({
   message,
   exploredTexts,
   nodeId,
+  onDeleteTurn,
 }: ChatMessageProps) {
   const { t } = useTranslation();
   const translatedCopyLabel = t('chat.copyMessage');
@@ -307,6 +310,18 @@ export const ChatMessage = memo(function ChatMessage({
                   : undefined}
               />
             ))}
+          </div>
+        )}
+        {isUser && onDeleteTurn && (
+          <div className="-mb-1 mt-1.5 flex justify-end">
+            <TurnDeleteControl
+              compact
+              alwaysVisible
+              label={t('chat.deleteTurn')}
+              confirmLabel={t('chat.deleteTurnConfirm')}
+              cancelLabel={t('common.cancel')}
+              onConfirm={() => onDeleteTurn(message.id)}
+            />
           </div>
         )}
       </div>

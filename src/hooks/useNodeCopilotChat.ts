@@ -82,7 +82,7 @@ export function useNodeCopilotChat(
           onToken: (token) => {
             const currentStore = useChatStore.getState();
             currentStore.setMessageStreamStatus(nodeId, assistantMessageId, 'answering');
-            currentStore.appendToLastMessage(nodeId, token);
+            currentStore.appendToMessage(nodeId, assistantMessageId, token);
           },
           onReasoning: () => {
             useChatStore.getState().setMessageStreamStatus(nodeId, assistantMessageId, 'thinking');
@@ -113,7 +113,7 @@ export function useNodeCopilotChat(
           onError: (error) => {
             const currentStore = useChatStore.getState();
             currentStore.setMessageStreamStatus(nodeId, assistantMessageId, undefined);
-            currentStore.appendToLastMessage(nodeId, `\n\n**Error:** ${error.message}`);
+            currentStore.appendToMessage(nodeId, assistantMessageId, `\n\n**Error:** ${error.message}`);
             currentStore.setStreaming(nodeId, false);
           },
         },

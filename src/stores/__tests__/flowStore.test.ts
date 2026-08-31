@@ -219,6 +219,16 @@ describe('flowStore', () => {
 
       expect(useFlowStore.getState().nodes[0].data.agentRuns?.[0].events).toEqual([]);
     });
+
+    it('removes only the selected Agent runs from a node', () => {
+      const nodeId = useFlowStore.getState().addChatNode({ x: 0, y: 0 }, { topic: 'Agent task' });
+      useFlowStore.getState().beginNodeRun(nodeId, 'run-1', 100);
+      useFlowStore.getState().beginNodeRun(nodeId, 'run-2', 200);
+
+      useFlowStore.getState().removeNodeRuns(nodeId, ['run-2']);
+
+      expect(useFlowStore.getState().nodes[0].data.agentRuns?.map((run) => run.runId)).toEqual(['run-1']);
+    });
   });
 
   describe('updateNodeData', () => {

@@ -6,6 +6,7 @@ import { useWorkspaceStore } from '../../stores/workspaceStore';
 import {
   executeCanvasCommand,
   getCanvasUndoHistory,
+  retractableCanvasActionIds,
   undoAllCanvasCommands,
   undoCanvasCommand,
 } from './canvasCommandExecutor';
@@ -21,6 +22,27 @@ beforeEach(() => {
 });
 
 describe('CanvasCommandExecutor', () => {
+  it('identifies only applied mutating actions from one assistant turn', () => {
+    const base = { version: 1 as const, workspaceId, threadId: 'thread-1', timestamp: 1 };
+    expect(retractableCanvasActionIds([
+      { ...base, eventId: 'e1', type: 'canvas_command', payload: { command: {
+        version: 1, actionId: 'write-1', workspaceId, expectedRevision: 0, risk: 'write',
+        type: 'create_node', payload: { topic: 'New node' },
+      } } },
+      { ...base, eventId: 'e2', type: 'action_resolved', payload: { actionId: 'write-1', status: 'applied' } },
+      { ...base, eventId: 'e3', type: 'canvas_command', payload: { command: {
+        version: 1, actionId: 'read-1', workspaceId, expectedRevision: 1, risk: 'read',
+        type: 'read_canvas', payload: {},
+      } } },
+      { ...base, eventId: 'e4', type: 'action_resolved', payload: { actionId: 'read-1', status: 'applied' } },
+      { ...base, eventId: 'e5', type: 'canvas_command', payload: { command: {
+        version: 1, actionId: 'write-2', workspaceId, expectedRevision: 1, risk: 'write',
+        type: 'create_node', payload: { topic: 'Failed node' },
+      } } },
+      { ...base, eventId: 'e6', type: 'action_resolved', payload: { actionId: 'write-2', status: 'failed' } },
+    ])).toEqual(['write-1']);
+  });
+
   it('creates a node atomically and restores the full transaction on undo', () => {
     const result = executeCanvasCommand({
       version: 1, actionId: 'create-1', workspaceId, expectedRevision: 0, risk: 'write',

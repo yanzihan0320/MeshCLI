@@ -58,6 +58,7 @@ export function useNodeAgentRun(nodeId: string, topic: string) {
   const streamControllerRef = useRef<AbortController | undefined>(undefined);
   const responseTextRef = useRef('');
   const finalizedRunsRef = useRef(new Set<string>());
+  const removedRunsRef = useRef(new Set<string>());
   const runs = useFlowStore((state) =>
     state.nodes.find((node) => node.id === nodeId)?.data.agentRuns ?? EMPTY_RUNS
   );
@@ -89,9 +90,10 @@ export function useNodeAgentRun(nodeId: string, topic: string) {
       }];
     });
     let activeRunId: string | undefined;
+    let userMessageId: string | undefined;
     try {
       const attachments = await readAgentAttachments(files);
-      useChatStore.getState().addMessage(nodeId, 'user', trimmedPrompt);
+      userMessageId = useChatStore.getState().addMessage(nodeId, 'user', trimmedPrompt);
       const created = await nodeRunClient.createRun({
         nodeId,
         workspaceId,
@@ -107,10 +109,16 @@ export function useNodeAgentRun(nodeId: string, topic: string) {
         },
       });
       activeRunId = created.runId;
+      const userMessage = useChatStore.getState().getMessages(nodeId)
+        .find((message) => message.id === userMessageId);
+      if (userMessage) {
+        useChatStore.getState().addOrUpdateMessage(nodeId, { ...userMessage, triggeredBy: created.runId });
+      }
       useFlowStore.getState().beginNodeRun(nodeId, created.runId);
       const controller = new AbortController();
       streamControllerRef.current = controller;
       await nodeRunClient.streamEvents(created.runId, (event) => {
+        if (removedRunsRef.current.has(created.runId)) return;
         useFlowStore.getState().appendNodeRunEvent(nodeId, event);
         if (event.type === 'text_delta') {
           responseTextRef.current += String(event.payload.delta ?? '');
@@ -221,6 +229,65 @@ export function useNodeAgentRun(nodeId: string, topic: string) {
     }
   }, [isReviewing, latestRun, nodeId]);
 
+  const deleteTurnFromMessage = useCallback((messageId: string): boolean => {
+    const chat = useChatStore.getState();
+    const messages = chat.getMessages(nodeId);
+    const selectedIndex = messages.findIndex((message) => message.id === messageId);
+    if (selectedIndex < 0) return false;
+    const turnStartIndex = messages[selectedIndex].role === 'user'
+      ? selectedIndex
+      : messages.findLastIndex((message, index) => index <= selectedIndex && message.role === 'user');
+    if (turnStartIndex < 0) return false;
+
+    const cutoff = messages[turnStartIndex].timestamp;
+    const removedMessages = messages.slice(turnStartIndex);
+    const linkedRunIds = new Set(removedMessages
+      .map((message) => message.triggeredBy)
+      .filter((runId): runId is string => Boolean(runId)));
+    for (const run of runs) {
+      if (run.startedAt >= cutoff) linkedRunIds.add(run.runId);
+    }
+
+    const runIds = [...linkedRunIds];
+    if (runIds.length > 0) {
+      streamControllerRef.current?.abort();
+      for (const runId of runIds) {
+        removedRunsRef.current.add(runId);
+        finalizedRunsRef.current.add(runId);
+        const run = runs.find((candidate) => candidate.runId === runId);
+        if (run?.status === 'queued' || run?.status === 'running') {
+          void nodeRunClient.cancelRun(runId).catch(() => undefined);
+        }
+      }
+      useFlowStore.getState().removeNodeRuns(nodeId, runIds);
+      responseTextRef.current = '';
+    }
+    chat.deleteTurnFromMessage(nodeId, messageId);
+    setClientError(undefined);
+    return true;
+  }, [nodeId, runs]);
+
+  const deleteLatestRun = useCallback((): boolean => {
+    if (!latestRun) return false;
+    const messages = useChatStore.getState().getMessages(nodeId);
+    const linkedUser = [...messages].reverse().find((message) => (
+      message.role === 'user' && message.triggeredBy === latestRun.runId
+    ));
+    const fallbackUser = [...messages].reverse().find((message) => (
+      message.role === 'user' && message.timestamp <= latestRun.startedAt
+    ));
+    const target = linkedUser ?? fallbackUser;
+    if (!target) {
+      streamControllerRef.current?.abort();
+      removedRunsRef.current.add(latestRun.runId);
+      finalizedRunsRef.current.add(latestRun.runId);
+      if (isRunning) void nodeRunClient.cancelRun(latestRun.runId).catch(() => undefined);
+      useFlowStore.getState().removeNodeRuns(nodeId, [latestRun.runId]);
+      return true;
+    }
+    return deleteTurnFromMessage(target.id);
+  }, [deleteTurnFromMessage, isRunning, latestRun, nodeId]);
+
   return {
     latestRun,
     isRunning,
@@ -231,5 +298,7 @@ export function useNodeAgentRun(nodeId: string, topic: string) {
     applyRun: (changeSetId?: string) => reviewRun('apply', changeSetId),
     rejectRun: (changeSetId?: string) => reviewRun('reject', changeSetId),
     undoRun,
+    deleteTurnFromMessage,
+    deleteLatestRun,
   };
 }

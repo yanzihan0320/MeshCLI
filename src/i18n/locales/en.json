@@ -155,6 +155,8 @@
     ,"thinking": "Thinking…"
     ,"answering": "Writing answer…"
     ,"retrying": "Rate limited — retrying…"
+    ,"deleteTurn": "Delete"
+    ,"deleteTurnConfirm": "Delete this turn and everything after it?"
   },
   "node": {
     "expand": "Expand",
@@ -230,6 +232,8 @@
     "readOnlyAnalysisDescription": "No repository files changed, so there is nothing to apply or undo in code.",
     "undoCodeApply": "Undo code apply",
     "undoAvailableUntil": "Code undo is available until {{time}}",
+    "deleteRun": "Delete run",
+    "deleteRunConfirm": "Remove this run and all later context?",
     "supervisor": "supervisor",
     "fallback": "fallback",
     "executor": "executor",
@@ -287,6 +291,7 @@
       "undoUnavailable": "Undo is unavailable because the canvas changed or the page was reloaded.",
       "retractTurn": "Retract turn",
       "retractTurnConfirm": "Retract your latest message and its result? Any reversible canvas actions from this turn will also be undone.",
+      "retractTurnShortConfirm": "Cancel this unfinished turn?",
       "retractTurnSuccess": "Retracted the latest conversation turn.",
       "retractTurnCanvasSuccess": "Retracted the latest turn and undid {{count}} canvas action(s).",
       "retractTurnPartial": "The conversation was retracted, but some canvas changes could not be safely undone because the canvas changed or the page was reloaded.",

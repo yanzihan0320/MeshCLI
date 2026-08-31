@@ -65,6 +65,11 @@ export function ChatNodeComponent({ id, data, selected }: NodeProps<ChatNode>) {
     };
   }, [selected]);
   const updateNodeInternals = useUpdateNodeInternals();
+
+  const handleDeleteTurn = useCallback((messageId: string) => {
+    if (useChatStore.getState().conversations[id]?.isStreaming) cancelStream();
+    agentRun.deleteTurnFromMessage(messageId);
+  }, [agentRun, cancelStream, id]);
   const messageCount = useChatStore(
     (s) =>
       s.conversations[id]?.messages.filter((m) => m.role !== "system").length ??
@@ -616,9 +621,13 @@ export function ChatNodeComponent({ id, data, selected }: NodeProps<ChatNode>) {
         onApply={agentRun.applyRun}
         onReject={agentRun.rejectRun}
         onUndo={agentRun.undoRun}
+        onDelete={() => {
+          if (useChatStore.getState().conversations[id]?.isStreaming) cancelStream();
+          agentRun.deleteLatestRun();
+        }}
         fullHeight={false}
       />
-      <ChatMessageList nodeId={id} onExplore={handleExplore} />
+      <ChatMessageList nodeId={id} onExplore={handleExplore} onDeleteTurn={handleDeleteTurn} />
       <ChatInput
         nodeId={id}
         onSend={sendMessage}

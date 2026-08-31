@@ -20,12 +20,14 @@ interface ChatState {
     mimeType: string;
   }[], triggeredBy?: string) => string;
   appendToLastMessage: (nodeId: string, chunk: string) => void;
+  appendToMessage: (nodeId: string, messageId: string, chunk: string) => void;
   setMessageStreamStatus: (nodeId: string, messageId: string, status?: ChatStreamStatus) => void;
   setStreaming: (nodeId: string, streaming: boolean) => void;
   getMessages: (nodeId: string) => ChatMessage[];
   removeConversation: (nodeId: string) => void;
   setConversations: (conversations: Record<string, Conversation>) => void;
   setConversationMessages: (nodeId: string, messages: ChatMessage[]) => void;
+  deleteTurnFromMessage: (nodeId: string, messageId: string) => ChatMessage[];
   addOrUpdateMessage: (nodeId: string, message: ChatMessage) => void;
   setMessageBlocks: (nodeId: string, messageId: string, blocks: A2UIBlock[]) => void;
   setMessagePresentation: (nodeId: string, messageId: string, content: string, blocks: A2UIBlock[]) => void;
@@ -123,6 +125,48 @@ export const useChatStore = create<ChatState>((set, get) => ({
         [nodeId]: { ...conv, messages },
       },
     });
+  },
+
+  appendToMessage: (nodeId, messageId, chunk) => {
+    const conv = get().conversations[nodeId];
+    if (!conv || !conv.messages.some((message) => message.id === messageId)) return;
+    set({
+      conversations: {
+        ...get().conversations,
+        [nodeId]: {
+          ...conv,
+          messages: conv.messages.map((message) => (
+            message.id === messageId ? { ...message, content: message.content + chunk } : message
+          )),
+        },
+      },
+    });
+  },
+
+  deleteTurnFromMessage: (nodeId, messageId) => {
+    const conv = get().conversations[nodeId];
+    if (!conv) return [];
+    const selectedIndex = conv.messages.findIndex((message) => message.id === messageId);
+    if (selectedIndex < 0) return [];
+    let turnStartIndex = selectedIndex;
+    if (conv.messages[selectedIndex].role !== 'user') {
+      turnStartIndex = conv.messages.findLastIndex((message, index) => (
+        index <= selectedIndex && message.role === 'user'
+      ));
+    }
+    if (turnStartIndex < 0) return [];
+    const removed = conv.messages.slice(turnStartIndex);
+    set({
+      conversations: {
+        ...get().conversations,
+        [nodeId]: {
+          ...conv,
+          messages: conv.messages.slice(0, turnStartIndex),
+          isStreaming: false,
+        },
+      },
+    });
+    return removed;
   },
 
   setMessageStreamStatus: (nodeId, messageId, streamStatus) => {

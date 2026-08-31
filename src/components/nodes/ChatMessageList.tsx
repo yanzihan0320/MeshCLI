@@ -12,9 +12,10 @@ import { SelectionPopup } from './SelectionPopup';
 interface ChatMessageListProps {
   nodeId: string;
   onExplore: (selectedText: string, prompt: string) => void;
+  onDeleteTurn: (messageId: string) => void;
 }
 
-export function ChatMessageList({ nodeId, onExplore }: ChatMessageListProps) {
+export function ChatMessageList({ nodeId, onExplore, onDeleteTurn }: ChatMessageListProps) {
   const { t } = useTranslation();
   const allMessages = useChatStore((s) => s.conversations[nodeId]?.messages ?? []);
   const showSystemPrompts = useSettingsStore((s) => s.showSystemPrompts);
@@ -66,7 +67,13 @@ export function ChatMessageList({ nodeId, onExplore }: ChatMessageListProps) {
         ) : (
           <div className="py-2 space-y-1">
             {messages.map((msg) => (
-              <ChatMessage key={msg.id} nodeId={nodeId} message={msg} exploredTexts={exploredTexts} />
+              <ChatMessage
+                key={msg.id}
+                nodeId={nodeId}
+                message={msg}
+                exploredTexts={exploredTexts}
+                onDeleteTurn={onDeleteTurn}
+              />
             ))}
           </div>
         )}

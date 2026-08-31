@@ -9,6 +9,7 @@ import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { WorkspaceAssistantEvent } from '../../../packages/protocol/src/assistant';
 import { useAgent } from '../../services/agent';
+import { TurnDeleteControl } from '../ui/TurnDeleteControl';
 
 interface CustomCopilotChatProps {
   isOpen: boolean;
@@ -31,7 +32,7 @@ function activityLabel(event: WorkspaceAssistantEvent, t: TFunction): { title: s
 
 export function CustomCopilotChat({ isOpen, onClose }: CustomCopilotChatProps) {
   const { t } = useTranslation();
-  const { messages, activity, undoHistory, pendingCommand, isRunning, send, abort, retractLatestTurn, decidePending, undo, undoAll } = useAgent();
+  const { messages, activity, undoHistory, pendingCommand, isRunning, canRetract, send, abort, retractLatestTurn, decidePending, undo, undoAll } = useAgent();
   const [input, setInput] = useState('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [undoFeedback, setUndoFeedback] = useState<string>();
@@ -89,7 +90,6 @@ export function CustomCopilotChat({ isOpen, onClose }: CustomCopilotChatProps) {
   };
 
   const handleRetractLatestTurn = () => {
-    if (!window.confirm(t('copilot.chat.retractTurnConfirm'))) return;
     const result = retractLatestTurn();
     if (!result.removed) {
       setUndoFeedback(t('copilot.chat.retractTurnUnavailable'));
@@ -145,7 +145,7 @@ export function CustomCopilotChat({ isOpen, onClose }: CustomCopilotChatProps) {
               className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
             >
               <div
-              className={`max-w-[88%] rounded-[18px] px-4 py-3 ${
+              className={`group max-w-[88%] rounded-[18px] px-4 py-3 ${
                   msg.role === 'user'
                     ? 'mesh-user-bubble rounded-br-md'
                     : 'rounded-bl-md border border-border/75 bg-surface-900/76 text-text-primary shadow-[0_8px_28px_rgba(0,0,0,0.07)] backdrop-blur-xl'
@@ -158,17 +158,16 @@ export function CustomCopilotChat({ isOpen, onClose }: CustomCopilotChatProps) {
                 ) : (
                   <p className="whitespace-pre-wrap break-words text-[13px] leading-5">{msg.content}</p>
                 )}
-                {msg.role === 'user' && msg.id === latestUserMessageId && (
+                {msg.role === 'user' && msg.id === latestUserMessageId && canRetract && (
                   <div className="mt-2 flex justify-end">
-                    <button
-                      type="button"
-                      onClick={handleRetractLatestTurn}
-                      className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[10px] text-white/70 transition-colors hover:bg-white/10 hover:text-white"
-                      title={t('copilot.chat.retractTurn')}
-                      aria-label={t('copilot.chat.retractTurn')}
-                    >
-                      <Undo2 size={11} /> {t('copilot.chat.retractTurn')}
-                    </button>
+                    <TurnDeleteControl
+                      compact
+                      alwaysVisible
+                      label={t('copilot.chat.retractTurn')}
+                      confirmLabel={t('copilot.chat.retractTurnShortConfirm')}
+                      cancelLabel={t('common.cancel')}
+                      onConfirm={handleRetractLatestTurn}
+                    />
                   </div>
                 )}
                 {msg.role === 'assistant' && (

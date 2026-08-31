@@ -74,7 +74,7 @@ export function useChatNode(nodeId: string, topic: string, parentNodeId?: string
           onToken: (token) => {
             const currentStore = useChatStore.getState();
             currentStore.setMessageStreamStatus(nodeId, assistantMessageId, 'answering');
-            currentStore.appendToLastMessage(nodeId, token);
+            currentStore.appendToMessage(nodeId, assistantMessageId, token);
           },
           onReasoning: () => {
             useChatStore.getState().setMessageStreamStatus(nodeId, assistantMessageId, 'thinking');
@@ -93,8 +93,9 @@ export function useChatNode(nodeId: string, topic: string, parentNodeId?: string
           onError: (error) => {
             const currentStore = useChatStore.getState();
             currentStore.setMessageStreamStatus(nodeId, assistantMessageId, undefined);
-            currentStore.appendToLastMessage(
+            currentStore.appendToMessage(
               nodeId,
+              assistantMessageId,
               `\n\n**Error:** ${error.message}`
             );
             currentStore.setStreaming(nodeId, false);

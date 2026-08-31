@@ -155,6 +155,8 @@
     ,"thinking": "正在思考…"
     ,"answering": "正在生成回答…"
     ,"retrying": "请求过于频繁，正在重试…"
+    ,"deleteTurn": "删除"
+    ,"deleteTurnConfirm": "删除这一轮及其之后的全部上下文？"
   },
   "node": {
     "expand": "展开",
@@ -230,6 +232,8 @@
     "readOnlyAnalysisDescription": "没有修改仓库文件，因此无需应用，也没有可撤销的代码变更。",
     "undoCodeApply": "撤销代码应用",
     "undoAvailableUntil": "代码撤销有效期至 {{time}}",
+    "deleteRun": "删除运行",
+    "deleteRunConfirm": "删除本次运行及其之后的全部上下文？",
     "supervisor": "主控",
     "fallback": "备用路径",
     "executor": "执行器",
@@ -287,6 +291,7 @@
       "undoUnavailable": "画布已经变化或页面曾被重新加载，当前操作无法安全撤销。",
       "retractTurn": "撤回本轮",
       "retractTurnConfirm": "撤回最近发送的消息及其结果吗？本轮产生的可撤销画布操作也会一并恢复。",
+      "retractTurnShortConfirm": "取消这一轮尚未完成的运行？",
       "retractTurnSuccess": "已撤回最近一轮对话。",
       "retractTurnCanvasSuccess": "已撤回最近一轮，并恢复 {{count}} 个画布操作。",
       "retractTurnPartial": "对话已撤回，但画布后来发生变化或页面曾重新加载，部分画布操作无法安全恢复。",

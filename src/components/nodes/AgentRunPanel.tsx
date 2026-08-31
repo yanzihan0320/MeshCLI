@@ -10,6 +10,7 @@ import remarkGfm from 'remark-gfm';
 import type { AgentEvent, AgentRunRecord } from '../../../packages/protocol/src/agent';
 import { A2UIBlockSchema, createChangeSetReviewBlocks, type A2UIBlock } from '../../../packages/protocol/src/a2ui';
 import { A2UIRenderer } from '../a2ui/A2UIRenderer';
+import { TurnDeleteControl } from '../ui/TurnDeleteControl';
 
 interface AgentRunPanelProps {
   run?: AgentRunRecord;
@@ -20,6 +21,7 @@ interface AgentRunPanelProps {
   onApply: (changeSetId?: string) => void;
   onReject: (changeSetId?: string) => void;
   onUndo: (changeSetId?: string) => void;
+  onDelete: () => void;
   fullHeight?: boolean;
 }
 
@@ -96,6 +98,7 @@ export function AgentRunPanel({
   onApply,
   onReject,
   onUndo,
+  onDelete,
   fullHeight = false,
 }: AgentRunPanelProps) {
   const { t } = useTranslation();
@@ -244,6 +247,17 @@ export function AgentRunPanel({
           >
             <RotateCcw size={11} /> {t('agentRun.undoCodeApply')}{Number.isFinite(undoRemainingMs) ? ` · ${undoRemainingHours}h` : ''}
           </button>
+        )}
+        {run && (
+          <TurnDeleteControl
+            compact
+            alwaysVisible
+            label={t('agentRun.deleteRun')}
+            confirmLabel={t('agentRun.deleteRunConfirm')}
+            cancelLabel={t('common.cancel')}
+            onConfirm={onDelete}
+            className="shrink-0"
+          />
         )}
       </div>
 

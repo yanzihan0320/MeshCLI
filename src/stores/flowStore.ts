@@ -31,6 +31,7 @@ interface FlowState {
   toggleCollapseSmart: () => void;
   beginNodeRun: (nodeId: string, runId: string, startedAt?: number) => void;
   appendNodeRunEvent: (nodeId: string, event: AgentEvent) => void;
+  removeNodeRuns: (nodeId: string, runIds: string[]) => void;
 }
 
 export const useFlowStore = create<FlowState>((set, get) => ({
@@ -174,6 +175,24 @@ export const useFlowStore = create<FlowState>((set, get) => ({
         updatedRuns[runIndex] = updatedRun;
         return { ...node, data: { ...node.data, agentRuns: updatedRuns } };
       }),
+    });
+  },
+
+  removeNodeRuns: (nodeId, runIds) => {
+    if (runIds.length === 0) return;
+    const removed = new Set(runIds);
+    set({
+      nodes: get().nodes.map((node) => (
+        node.id === nodeId
+          ? {
+              ...node,
+              data: {
+                ...node.data,
+                agentRuns: (node.data.agentRuns ?? []).filter((run) => !removed.has(run.runId)),
+              },
+            }
+          : node
+      )),
     });
   },
 
