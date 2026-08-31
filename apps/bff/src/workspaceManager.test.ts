@@ -111,7 +111,13 @@ describe('WorkspaceManager', () => {
     await writeFile(join(managed.workspacePath, 'sample.txt'), 'committed by agent\n', 'utf8');
     await writeFile(join(managed.workspacePath, 'committed.txt'), 'new committed file\n', 'utf8');
     await git(managed.workspacePath, 'add', '--all');
-    await git(managed.workspacePath, 'commit', '--quiet', '-m', 'agent commit');
+    // Clones do not inherit the source repository's local Git identity.
+    await git(
+      managed.workspacePath,
+      '-c', 'user.name=MeshCLI Test',
+      '-c', 'user.email=meshcli@example.invalid',
+      'commit', '--quiet', '-m', 'agent commit',
+    );
 
     const changeSet = await manager.createChangeSet('run-agent-commit');
     expect(changeSet.files).toEqual(expect.arrayContaining([
